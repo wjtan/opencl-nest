@@ -156,6 +156,9 @@ public:
   // TODO: rename / precisely how defined?
   delay get_to_step() const;
 
+  // If thread is GPU
+  bool isGPU() const;
+
   std::vector<model_gpu*> gpu_execution;
   int update_type;
   double update_time;
@@ -168,8 +171,8 @@ private:
   void advance_time_();   //!< Update time to next time step
   void print_progress_(); //!< TODO: Remove, replace by logging!
   void update_nodes(const std::vector< Node * >& nodes); // update a vector of nodes at once
-  void mass_update_nodes(const std::vector< Node * >& nodes); // special case for GPU development
-
+  void update_nodes_gpu(model_gpu* model, const std::vector< Node * >& nodes); // update a vector of nodes at once for GPU
+  
   Time clock_;            //!< SimulationManager clock, updated once per slice
   delay slice_;           //!< current update slice
   delay to_do_;           //!< number of pending cycles.

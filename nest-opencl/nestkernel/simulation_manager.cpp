@@ -41,15 +41,7 @@
 
 #include "../models/iaf_psc_alpha_gpu.h"
 
-#ifdef PROFILING
-  #define PROFILING_INIT() struct timeval start_time, end_time, diff_time;
-  #define PROFILING_START() gettimeofday(&start_time, NULL);
-  #define PROFILING_END(output) gettimeofday(&end_time, NULL); timersub(&end_time, &start_time, &diff_time); printf("%s: %0.3f\n", output, (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000);
-#else
-  #define PROFILING_INIT()
-  #define PROFILING_START()
-  #define PROFILING_END(output)
-#endif
+#include "profile.h"
 
 nest::SimulationManager::SimulationManager()
   : clock_( Time::tic( 0L ) )
@@ -364,6 +356,13 @@ nest::SimulationManager::set_status( const DictionaryDatum& d )
       wfr_interpolation_order_ = interp_order;
     }
   }
+
+
+  long num_gpu;
+  if ( updateValue< long >( d, names::num_gpu, num_gpu ) )
+  {
+    this->num_gpu_threads = num_gpu;
+  }
 }
 
 void
@@ -386,6 +385,15 @@ nest::SimulationManager::get_status( DictionaryDatum& d )
   def< double >( d, names::wfr_tol, wfr_tol_ );
   def< long >( d, names::wfr_max_iterations, wfr_max_iterations_ );
   def< long >( d, names::wfr_interpolation_order, wfr_interpolation_order_ );
+
+  def< long >( d, names::num_gpu, num_gpu_threads );
+}
+
+bool
+nest::SimulationManager::isGPU() const
+{
+  const int thrd = kernel().vp_manager.get_thread_id();
+  return thrd < this->num_gpu_threads;
 }
 
 void
@@ -446,7 +454,7 @@ nest::SimulationManager::prepare()
     kernel().music_manager.enter_runtime( tick );
   }
 
-  this->num_gpu_threads = 2;
+  //this->num_gpu_threads = 2;
 
   if (gpu_execution.size() == 0)
   {
@@ -602,7 +610,13 @@ nest::SimulationManager::call_update_()
 
 #ifdef _OPENMP
   os << std::endl
-     << "Number of OpenMP threads: " << kernel().vp_manager.get_num_threads();
+     << "Number of OpenMP threads: " << kernel().vp_manager.get_num_real_threads();
+
+  os << std::endl
+     << "Number of threads: " << kernel().vp_manager.get_num_threads();
+
+  os << std::endl
+     << "Number of GPU threads: " << this->num_gpu_threads;
 #else
   os << std::endl
      << "Not using OpenMP";
@@ -672,21 +686,25 @@ nest::SimulationManager::update_()
   exit_on_user_signal_ = false;
 
   std::vector< lockPTR< WrappedThreadException > > exceptions_raised(
-    kernel().vp_manager.get_num_threads() );
+    kernel().vp_manager.get_num_real_threads() );
   bool exception_raised = false; // none raised on any thread
+
+  kernel().vp_manager.omp_set_real_threads();
 
   // parallel section begins
   #pragma omp parallel
   {
     const int thrd = kernel().vp_manager.get_thread_id();
+    const int vp_per_thread = kernel().vp_manager.get_vp_per_thread();
+
     iaf_psc_alpha_gpu* gpu_exc;
     PROFILING_INIT();
 
-    const bool isGPU = thrd < this->num_gpu_threads;
+    const bool isGPU = this->isGPU();
 
     if (isGPU)
     {
-      gpu_exc = (iaf_psc_alpha_gpu*)gpu_execution[thrd];
+      gpu_exc = (iaf_psc_alpha_gpu*) gpu_execution[thrd];
       gpu_exc->initialize_gpu();
     }
     
@@ -700,19 +718,17 @@ nest::SimulationManager::update_()
     {
       gpu_exc->total_num_nodes = kernel().node_manager.size();
       gpu_exc->num_local_nodes = thread_local_nodes.size();
-    }
 
-    //std::cout << "thread_local_nodes " << thread_local_nodes.size() << std::endl;    
-    do {
-      if (isGPU && not gpu_exc->init_device)
-      {
+      if (not gpu_exc->init_device) {
         cout << "[" << thrd << "] init_device" << endl;
         kernel().event_delivery_manager.deliver_build_graph_events( thrd );
         gpu_exc->initialize();
         gpu_exc->init_device = true;
         cout << "[" << thrd << "] done" << endl;
       }
+    }
 
+    do {
       if ( print_time_ ) {
         gettimeofday( &t_slice_begin_, NULL );
       }
@@ -886,29 +902,28 @@ nest::SimulationManager::update_()
       } // of if(wfr_is_used)
       // end of preliminary update
 
-      const std::vector< Node* >& thread_local_nodes =
-        kernel().node_manager.get_nodes_on_thread( thrd );
+      //const std::vector< Node* >& thread_local_nodes =
+      //  kernel().node_manager.get_nodes_on_thread( thrd );
 
       gettimeofday( &t_slice_begin_, NULL );
 
-      if (thrd < this->num_gpu_threads)
+      if (isGPU)
       {
         gpu_exc->update_type = 2;
         //if (gpu_exc->updated_nodes.empty())
-      }
-      
-      update_nodes(thread_local_nodes);
 
-      if (thrd < this->num_gpu_threads)
-      {
+        update_nodes_gpu(gpu_exc, thread_local_nodes);
+
         PROFILING_START();
-        mass_update_nodes(gpu_exc->updated_nodes); //(thread_local_nodes);
+        gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
         PROFILING_END("Mass Update Nodes");
 
         PROFILING_START();
         gpu_exc->deliver_events();
         //gpu_exc->deliver_static_events();
         PROFILING_END("Spike deliver");
+      } else {
+        update_nodes(thread_local_nodes);
       }
       
       gettimeofday( &t_slice_end_, NULL );
@@ -932,7 +947,7 @@ nest::SimulationManager::update_()
       #pragma omp master
       {
         // check if any thread in parallel section raised an exception
-        for ( index thrd = 0; thrd < kernel().vp_manager.get_num_threads(); ++thrd )
+        for ( index thrd = 0; thrd < kernel().vp_manager.get_num_real_threads(); ++thrd )
         {
           if ( exceptions_raised.at( thrd ).valid() )
           {
@@ -968,9 +983,12 @@ nest::SimulationManager::update_()
     } while (to_do_ > 0 and not exit_on_user_signal_ and not exception_raised );
 
     // End of the slice, we update the number of synaptic elements
-    for ( std::vector< Node* >::const_iterator i =
-            kernel().node_manager.get_nodes_on_thread( thrd ).begin();
-          i != kernel().node_manager.get_nodes_on_thread( thrd ).end();
+    //for ( std::vector< Node* >::const_iterator i =
+    //        kernel().node_manager.get_nodes_on_thread( thrd ).begin();
+    //      i != kernel().node_manager.get_nodes_on_thread( thrd ).end();
+    //      ++i )
+    for ( std::vector< Node* >::const_iterator i = thread_local_nodes.begin();
+          i != thread_local_nodes.end();
           ++i )
     {
       ( *i )->update_synaptic_elements(
@@ -980,7 +998,7 @@ nest::SimulationManager::update_()
   } // end of #pragma parallel omp
 
   // check if any exceptions have been raised
-  for ( index thrd = 0; thrd < kernel().vp_manager.get_num_threads(); ++thrd )
+  for ( index thrd = 0; thrd < kernel().vp_manager.get_num_real_threads(); ++thrd )
   {
     if ( exceptions_raised.at( thrd ).valid() )
     {
@@ -989,52 +1007,44 @@ nest::SimulationManager::update_()
       throw WrappedThreadException( *( exceptions_raised.at( thrd ) ) );
     }
   }
-}
 
-void
-nest::SimulationManager::mass_update_nodes(const std::vector< Node * >& nodes)
-{
-  const int thrd = kernel().vp_manager.get_thread_id();
-  this->gpu_execution[thrd]->mass_update(nodes, clock_, from_step_, to_step_ );
+  kernel().vp_manager.omp_set_threads();
 }
 
 void
 nest::SimulationManager::update_nodes(const std::vector< Node * >& nodes)
 {
-  const int thrd = kernel().vp_manager.get_thread_id();
-  if (thrd < this->num_gpu_threads)
+  for (
+    std::vector< Node* >::const_iterator node = nodes.begin();
+    node != nodes.end();
+    ++node )
+  {
+    // We update in a parallel region. Therefore, we need to catch
+    // exceptions here and then handle them after the parallel region.
+    if ( not( *node )->is_frozen() )
     {
-      model_gpu *model = this->gpu_execution[thrd];
-      if (not model->updated_nodes.empty())
-        return;
-      for (
-        std::vector< Node* >::const_iterator node = nodes.begin();
-        node != nodes.end();
-        ++node )
-      {
-        // We update in a parallel region. Therefore, we need to catch
-        // exceptions here and then handle them after the parallel region.
-        if ( not( *node )->is_frozen() )
-          {
-            model->updated_nodes.push_back(*node);
-          }
-      }
+      ( *node )->update( clock_, from_step_, to_step_ );
     }
-  else
+  }
+}
+
+void
+nest::SimulationManager::update_nodes_gpu(model_gpu *model, const std::vector< Node * >& nodes)
+{
+  if (not model->updated_nodes.empty())
+    return;
+  for (
+    std::vector< Node* >::const_iterator node = nodes.begin();
+    node != nodes.end();
+    ++node )
+  {
+    // We update in a parallel region. Therefore, we need to catch
+    // exceptions here and then handle them after the parallel region.
+    if ( not( *node )->is_frozen() )
     {
-      for (
-       std::vector< Node* >::const_iterator node = nodes.begin();
-       node != nodes.end();
-       ++node )
-      {
-        // We update in a parallel region. Therefore, we need to catch
-        // exceptions here and then handle them after the parallel region.
-        if ( not( *node )->is_frozen() )
-          {
-            ( *node )->update( clock_, from_step_, to_step_ );
-          }
-      }
+      model->updated_nodes.push_back(*node);
     }
+  }
 }
 
 void

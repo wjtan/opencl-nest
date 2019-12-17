@@ -6,19 +6,10 @@
 #include "kernel_manager.h"
 #include "universal_data_logger_impl.h"
 #include "vp_manager_impl.h"
+#include "profile.h"
 
 #ifdef PROFILING
 #include <sys/time.h>
-#endif
-
-#ifdef PROFILING
-  #define PROFILING_INIT() struct timeval start_time, end_time, diff_time;
-  #define PROFILING_START() gettimeofday(&start_time, NULL);
-  #define PROFILING_END(output) gettimeofday(&end_time, NULL); timersub(&end_time, &start_time, &diff_time); printf("%s [%d]: %0.3f\n", output, thrd_id, (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000);
-#else
-  #define PROFILING_INIT()
-  #define PROFILING_START()
-  #define PROFILING_END(output)
 #endif
 
 nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
@@ -342,7 +333,9 @@ nest::iaf_psc_alpha_gpu::initialize_command_queue()
   try
   {
     int num_devices = gpu_context.list_device.size();
-    
+
+    print("[%d] Num of Devices\n", thrd_id, num_devices);
+
     this->command_queue = cl::CommandQueue(context, gpu_context.list_device[vp_id % num_devices]);
   }
   catch (const cl::Error &err) {
@@ -361,9 +354,12 @@ nest::iaf_psc_alpha_gpu::initialize_device()
 {
   if (!is_initialized)
     {
-      printf("initialize_device %d\n", this->num_local_nodes);
-
+      int thrd_id = kernel().vp_manager.get_thread_id();
       int len = this->num_local_nodes;
+
+      //setlocale(LC_NUMERIC, "");
+      printf("[%d] Num of nodes: %d\n", thrd_id, this->num_local_nodes);
+      //printf("[%d] Double: %'ld Int: %'ld\n", thrd_id, 26 * len * sizeof(double), 3 * len * sizeof(int));
       
       h_S__y3_ = new double[len];
       h_P__Theta_ = new double[len];

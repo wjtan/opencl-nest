@@ -37,6 +37,8 @@
 // Includes from sli:
 #include "dictutils.h"
 
+#include "profile.h"
+
 namespace nest
 {
 EventDeliveryManager::EventDeliveryManager()
@@ -521,6 +523,8 @@ EventDeliveryManager::deliver_events( thread t )
 
   std::vector< int > pos( displacements_ );
 
+  const bool isGPU = kernel().simulation_manager.isGPU();
+
   if ( not off_grid_spiking_ ) // on_grid_spiking
   {
     // prepare Time objects for every possible time stamp within min_delay_
@@ -550,46 +554,29 @@ EventDeliveryManager::deliver_events( thread t )
           se.set_stamp( prepared_timestamps[ lag ] );
           se.set_sender_gid( nid );
 
-	  if (t < kernel().simulation_manager.num_gpu_threads)
-	    {
-	      // std::cout << "nid " << nid << std::endl;
-	      // getchar();
-#ifdef PROFILING
-	      struct timeval start_time, end_time, diff_time;
-	      gettimeofday(&start_time, NULL);
-#endif
-	    }
+          PROFILING_INIT();
+          if (isGPU)
+          {
+            PROFILING_START();
+          }
 
           kernel().connection_manager.send( t, nid, se );
 
-	  if (t < kernel().simulation_manager.num_gpu_threads)
-	    {
-#ifdef PROFILING
-	      gettimeofday(&end_time, NULL);
-	      timersub(&end_time, &start_time, &diff_time);
-	      double diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	      printf("----\nconnection_manager send: %0.3f\n", diff);
-#endif
+          if (isGPU)
+          {
+            PROFILING_END("----\nconnection_manager send");
 
-#ifdef PROFILING
-	      gettimeofday(&start_time, NULL);
-#endif
-
-	      kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
-	  
-#ifdef PROFILING
-	      gettimeofday(&end_time, NULL);
-	      timersub(&end_time, &start_time, &diff_time);
-	      diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	      printf("deliver_events: %0.3f\n----\n", diff);
-#endif
-	    }
-
+            PROFILING_START();
+            kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
+            PROFILING_END("deliver_events");
+          }
         }
         else
         {
-	  if (t < kernel().simulation_manager.num_gpu_threads)
-	    kernel().simulation_manager.gpu_execution[t]->deliver_events();
+      	  if (isGPU)
+          {
+	          kernel().simulation_manager.gpu_execution[t]->deliver_events();
+          }
           --lag;
         }
         ++pos_pid;
@@ -669,20 +656,17 @@ EventDeliveryManager::deliver_events( thread t )
         index nid = global_offgrid_spikes_[ pos_pid ].get_gid();
         if ( nid != static_cast< index >( comm_marker_ ) )
         {
-	  // std::cout << "nid " << nid << std::endl;
-	  // getchar();
           // tell all local nodes about spikes on remote machines.
           se.set_stamp( prepared_timestamps[ lag ] );
           se.set_sender_gid( nid );
           se.set_offset( global_offgrid_spikes_[ pos_pid ].get_offset() );
           kernel().connection_manager.send( t, nid, se );
-	  if (t < kernel().simulation_manager.num_gpu_threads)
-	    kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
-	}
+          
+          if (isGPU) kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
+	      }
         else
         {
-	  if (t < kernel().simulation_manager.num_gpu_threads)
-	    kernel().simulation_manager.gpu_execution[t]->deliver_events();
+          if (isGPU) kernel().simulation_manager.gpu_execution[t]->deliver_events();
           --lag;
         }
         ++pos_pid;
@@ -694,7 +678,7 @@ EventDeliveryManager::deliver_events( thread t )
   return done;
 }
 
-  bool
+bool
 EventDeliveryManager::deliver_build_graph_events( thread t )
   {
     BuildGraphEvent e;

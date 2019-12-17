@@ -41,6 +41,7 @@ nest::VPManager::VPManager()
   : force_singlethreading_( true )
 #endif
   , n_threads_( 1 )
+  , n_real_threads_ (1)
 {
 }
 
@@ -59,6 +60,7 @@ nest::VPManager::initialize()
   omp_set_dynamic( false );
 #endif
   set_num_threads( 1 );
+  set_num_real_threads( 1 );
 }
 
 void
@@ -198,6 +200,26 @@ nest::VPManager::set_status( const DictionaryDatum& d )
     set_num_threads( n_threads );
     kernel().num_threads_changed_reset();
   }
+
+  long n_real_threads = get_num_real_threads();
+  bool n_real_threads_updated = updateValue< long >( d, names::num_real_threads, n_real_threads );
+  if (n_real_threads_updated)
+  {
+    if ( n_vps % n_real_threads != 0 )
+    {
+      throw BadProperty(
+        "Number of virtual processors must be an integer multiple of the number of real threads. Value unchanged." );
+    }
+
+    if (n_real_threads < n_vps)
+    {
+      n_real_threads = n_vps;
+    }
+
+    set_num_real_threads( n_real_threads );
+    
+    this->vp_per_thread_ = n_vps / n_real_threads;
+  }
 }
 
 void
@@ -205,6 +227,7 @@ nest::VPManager::get_status( DictionaryDatum& d )
 {
   def< long >( d, names::local_num_threads, get_num_threads() );
   def< long >( d, names::total_num_virtual_procs, get_num_virtual_processes() );
+  def< long >( d, names::num_real_threads, get_num_real_threads() );
 }
 
 void
@@ -218,6 +241,28 @@ nest::VPManager::set_num_threads( nest::thread n_threads )
   }
   n_threads_ = n_threads;
 
+#ifdef _OPENMP
+  omp_set_num_threads( n_threads_ );
+#endif
+}
+
+void
+nest::VPManager::set_num_real_threads( nest::thread n_threads )
+{
+  n_real_threads_ = n_threads;
+}
+
+void
+nest::VPManager::omp_set_real_threads()
+{
+#ifdef _OPENMP
+  omp_set_num_threads( n_real_threads_ );
+#endif
+}
+
+void
+nest::VPManager::omp_set_threads()
+{
 #ifdef _OPENMP
   omp_set_num_threads( n_threads_ );
 #endif

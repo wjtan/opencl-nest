@@ -68,11 +68,27 @@ public:
    */
   void set_num_threads( thread n_threads );
 
+  void set_num_real_threads( thread n_threads );
+
   /**
    * Get number of threads.
    * This function returns the total number of threads per process.
    */
   index get_num_threads() const;
+
+  index get_num_real_threads() const;
+
+  index get_vp_per_thread() const;
+
+  /**
+   * Omp set to num of threads
+   */
+  void omp_set_threads();
+
+  /**
+   * Omp set to real num of threads
+   */
+  void omp_set_real_threads();
 
   /**
    * Return a thread number for a given global node id.
@@ -122,6 +138,8 @@ public:
 private:
   const bool force_singlethreading_;
   index n_threads_; //!< Number of threads per process.
+  index n_real_threads_;
+  index vp_per_thread_;
 };
 }
 
@@ -139,6 +157,18 @@ inline nest::index
 nest::VPManager::get_num_threads() const
 {
   return n_threads_;
+}
+
+inline nest::index
+nest::VPManager::get_num_real_threads() const
+{
+  return n_real_threads_;
+}
+
+inline nest::index 
+nest::VPManager::get_vp_per_thread() const
+{
+  return vp_per_thread_;
 }
 
 #endif /* VP_MANAGER_H */

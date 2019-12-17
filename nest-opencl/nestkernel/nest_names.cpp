@@ -297,6 +297,8 @@ const Name noisy_rate( "noisy_rate" );
 const Name no_synapses( "no_synapses" );
 const Name num_connections( "num_connections" );
 const Name num_processes( "num_processes" );
+const Name num_real_threads( "num_real_threads" );
+const Name num_gpu( "num_gpu" );
 const Name number_of_children( "number_of_children" );
 
 const Name off_grid_spiking( "off_grid_spiking" );
