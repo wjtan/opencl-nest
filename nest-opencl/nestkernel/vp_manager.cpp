@@ -211,10 +211,10 @@ nest::VPManager::set_status( const DictionaryDatum& d )
         "Number of virtual processors must be an integer multiple of the number of real threads. Value unchanged." );
     }
 
-    if (n_real_threads < n_vps)
-    {
-      n_real_threads = n_vps;
-    }
+    //if (n_real_threads < n_vps)
+    //{
+    //  n_real_threads = n_vps;
+    //}
 
     set_num_real_threads( n_real_threads );
     

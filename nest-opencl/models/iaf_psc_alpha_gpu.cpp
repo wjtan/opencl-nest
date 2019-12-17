@@ -169,7 +169,7 @@ nest::iaf_psc_alpha_gpu::mass_update_( const std::vector<Node *> &nodes,
   PROFILING_INIT();
 
   //#ifdef PROFILING
-  int thrd_id = kernel().vp_manager.get_thread_id();
+  //int thrd_id = kernel().vp_manager.get_thread_id();
   //#endif  
 
   //int count_spike = 0;
@@ -264,8 +264,8 @@ nest::iaf_psc_alpha_gpu::mass_update_( const std::vector<Node *> &nodes,
 int
 nest::iaf_psc_alpha_gpu::initialize_opencl_context()
 {
-  int thrd_id = kernel().vp_manager.get_thread_id();
-  printf("[%d] Initialize OpenCL Context\n", thrd_id);
+  //int thrd_id = kernel().vp_manager.get_thread_id();
+  //printf("[%d] Initialize OpenCL Context\n", thrd_id);
 
   try
     {
@@ -334,7 +334,7 @@ nest::iaf_psc_alpha_gpu::initialize_command_queue()
   {
     int num_devices = gpu_context.list_device.size();
 
-    print("[%d] Num of Devices\n", thrd_id, num_devices);
+    printf("[%d] Num of Devices: %d\n", thrd_id, num_devices);
 
     this->command_queue = cl::CommandQueue(context, gpu_context.list_device[vp_id % num_devices]);
   }

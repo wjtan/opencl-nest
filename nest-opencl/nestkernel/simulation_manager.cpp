@@ -610,10 +610,7 @@ nest::SimulationManager::call_update_()
 
 #ifdef _OPENMP
   os << std::endl
-     << "Number of OpenMP threads: " << kernel().vp_manager.get_num_real_threads();
-
-  os << std::endl
-     << "Number of threads: " << kernel().vp_manager.get_num_threads();
+     << "Number of OpenMP threads: " << kernel().vp_manager.get_num_threads();
 
   os << std::endl
      << "Number of GPU threads: " << this->num_gpu_threads;
@@ -686,10 +683,10 @@ nest::SimulationManager::update_()
   exit_on_user_signal_ = false;
 
   std::vector< lockPTR< WrappedThreadException > > exceptions_raised(
-    kernel().vp_manager.get_num_real_threads() );
+    kernel().vp_manager.get_num_threads() );
   bool exception_raised = false; // none raised on any thread
 
-  kernel().vp_manager.omp_set_real_threads();
+  //kernel().vp_manager.omp_set_real_threads();
 
   // parallel section begins
   #pragma omp parallel
@@ -714,18 +711,16 @@ nest::SimulationManager::update_()
     const std::vector< Node* >& thread_local_nodes =
       kernel().node_manager.get_nodes_on_thread( thrd );
 
-    if (isGPU)
+    if (isGPU && not gpu_exc->init_device)
     {
       gpu_exc->total_num_nodes = kernel().node_manager.size();
       gpu_exc->num_local_nodes = thread_local_nodes.size();
 
-      if (not gpu_exc->init_device) {
-        cout << "[" << thrd << "] init_device" << endl;
-        kernel().event_delivery_manager.deliver_build_graph_events( thrd );
-        gpu_exc->initialize();
-        gpu_exc->init_device = true;
-        cout << "[" << thrd << "] done" << endl;
-      }
+      cout << "[" << thrd << "] init_device" << endl;
+      kernel().event_delivery_manager.deliver_build_graph_events( thrd );
+      gpu_exc->initialize();
+      gpu_exc->init_device = true;
+      cout << "[" << thrd << "] done" << endl;
     }
 
     do {
@@ -947,7 +942,7 @@ nest::SimulationManager::update_()
       #pragma omp master
       {
         // check if any thread in parallel section raised an exception
-        for ( index thrd = 0; thrd < kernel().vp_manager.get_num_real_threads(); ++thrd )
+        for ( index thrd = 0; thrd < kernel().vp_manager.get_num_threads(); ++thrd )
         {
           if ( exceptions_raised.at( thrd ).valid() )
           {
@@ -998,7 +993,7 @@ nest::SimulationManager::update_()
   } // end of #pragma parallel omp
 
   // check if any exceptions have been raised
-  for ( index thrd = 0; thrd < kernel().vp_manager.get_num_real_threads(); ++thrd )
+  for ( index thrd = 0; thrd < kernel().vp_manager.get_num_threads(); ++thrd )
   {
     if ( exceptions_raised.at( thrd ).valid() )
     {
@@ -1008,7 +1003,7 @@ nest::SimulationManager::update_()
     }
   }
 
-  kernel().vp_manager.omp_set_threads();
+  //kernel().vp_manager.omp_set_threads();
 }
 
 void
