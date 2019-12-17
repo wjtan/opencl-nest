@@ -41,6 +41,15 @@
 
 #include "../models/iaf_psc_alpha_gpu.h"
 
+#ifdef PROFILING
+  #define PROFILING_INIT() struct timeval start_time, end_time, diff_time;
+  #define PROFILING_START() gettimeofday(&start_time, NULL);
+  #define PROFILING_END(output) gettimeofday(&end_time, NULL); timersub(&end_time, &start_time, &diff_time); printf("%s: %0.3f\n", output, (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000);
+#else
+  #define PROFILING_INIT()
+  #define PROFILING_START()
+  #define PROFILING_END(output)
+#endif
 
 nest::SimulationManager::SimulationManager()
   : clock_( Time::tic( 0L ) )
@@ -440,12 +449,12 @@ nest::SimulationManager::prepare()
   this->num_gpu_threads = 2;
 
   if (gpu_execution.size() == 0)
-    {
-      gpu_execution.resize(this->num_gpu_threads);
+  {
+    gpu_execution.resize(this->num_gpu_threads);
 
-      for (int i = 0; i < this->num_gpu_threads; i++)
-	gpu_execution[i] = new iaf_psc_alpha_gpu;
-    }
+    for (int i = 0; i < this->num_gpu_threads; i++)
+      gpu_execution[i] = new iaf_psc_alpha_gpu;
+  }
 }
 
 void
@@ -666,130 +675,86 @@ nest::SimulationManager::update_()
     kernel().vp_manager.get_num_threads() );
   bool exception_raised = false; // none raised on any thread
 
-// parallel section begins
-#pragma omp parallel
+  // parallel section begins
+  #pragma omp parallel
   {
     const int thrd = kernel().vp_manager.get_thread_id();
     iaf_psc_alpha_gpu* gpu_exc;
+    PROFILING_INIT();
 
-    if (thrd < this->num_gpu_threads)
-      {
-	gpu_exc = (iaf_psc_alpha_gpu*)gpu_execution[thrd];
-	gpu_exc->initialize_gpu();
-      }
+    const bool isGPU = thrd < this->num_gpu_threads;
+
+    if (isGPU)
+    {
+      gpu_exc = (iaf_psc_alpha_gpu*)gpu_execution[thrd];
+      gpu_exc->initialize_gpu();
+    }
     
-#pragma omp barrier
+    /********************************************************************************/
+    #pragma omp barrier
     
     const std::vector< Node* >& thread_local_nodes =
       kernel().node_manager.get_nodes_on_thread( thrd );
 
-    if (thrd < this->num_gpu_threads)
-      {
-	gpu_exc->total_num_nodes = kernel().node_manager.size();
-	gpu_exc->num_local_nodes = thread_local_nodes.size();
-      }
+    if (isGPU)
+    {
+      gpu_exc->total_num_nodes = kernel().node_manager.size();
+      gpu_exc->num_local_nodes = thread_local_nodes.size();
+    }
 
     //std::cout << "thread_local_nodes " << thread_local_nodes.size() << std::endl;    
-    do
-    {
-      if (thrd < this->num_gpu_threads && not gpu_exc->init_device)
-	{
-	  cout << "init_device" << endl;
-	  kernel().event_delivery_manager.deliver_build_graph_events( thrd );
-	  gpu_exc->initialize();
-	  gpu_exc->init_device = true;
-	  cout << "done" << endl;
-	}
-
-      if ( print_time_ )
+    do {
+      if (isGPU && not gpu_exc->init_device)
       {
+        cout << "[" << thrd << "] init_device" << endl;
+        kernel().event_delivery_manager.deliver_build_graph_events( thrd );
+        gpu_exc->initialize();
+        gpu_exc->init_device = true;
+        cout << "[" << thrd << "] done" << endl;
+      }
+
+      if ( print_time_ ) {
         gettimeofday( &t_slice_begin_, NULL );
       }
       
       if ( from_step_ == 0 ) // deliver only at beginning of slice
       {
-	if (thrd < this->num_gpu_threads)
-	  {
-	    gpu_exc->update_type = 1;
+        if (isGPU)
+        {
+          gpu_exc->update_type = 1;
 
-#ifdef PROFILING
-	    struct timeval start_time, end_time, diff_time;
-	    gettimeofday(&start_time, NULL);
-#endif
+          PROFILING_START();
 
-	    gpu_exc->clear_buffer();
-	    gpu_exc->pre_deliver_event(thread_local_nodes);
-	
-	
-#ifdef PROFILING
-	    gettimeofday(&end_time, NULL);
-	    timersub(&end_time, &start_time, &diff_time);
-	    double diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	    printf("------\nPre Deliver events: %0.3f\n", diff);
-#endif
+          gpu_exc->clear_buffer();
+          gpu_exc->pre_deliver_event(thread_local_nodes);
+    
+          PROFILING_END("------\nPre Deliver events");
+          //gpu_exc->insert_events();
+        }
+    
+        PROFILING_START();
+        kernel().event_delivery_manager.deliver_events( thrd );
+        PROFILING_END("Main Deliver events");
+    
+        if (isGPU)
+        {
+          //gpu_exc->deliver_events();
+          PROFILING_START();
+          gpu_exc->post_deliver_event(thread_local_nodes);
+          PROFILING_END("Post Deliver events");
 
-#ifdef PROFILING
-	    gettimeofday(&start_time, NULL);
-#endif
-
-	    //gpu_exc->insert_events();
-	  }
-	
-	kernel().event_delivery_manager.deliver_events( thrd );
-	
-	if (thrd < this->num_gpu_threads)
-	  {
-	    //gpu_exc->deliver_events();
-#ifdef PROFILING
-	    gettimeofday(&end_time, NULL);
-	    timersub(&end_time, &start_time, &diff_time);
-	    diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	    printf("Main Deliver events: %0.3f\n", diff);
-#endif
-
-#ifdef PROFILING
-	    gettimeofday(&start_time, NULL);
-#endif
-
-	    gpu_exc->post_deliver_event(thread_local_nodes);
-
-#ifdef PROFILING
-	    gettimeofday(&end_time, NULL);
-	    timersub(&end_time, &start_time, &diff_time);
-	    diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	    printf("Post Deliver events: %0.3f\n", diff);
-#endif
-
-#ifdef BREAKDOWN
-	    struct timeval start_time, end_time, diff_time;
-	    gettimeofday(&start_time, NULL);
-#endif
-
-	    gpu_exc->deliver_static_events();
-
-#ifdef PROFILING
-	    gettimeofday(&end_time, NULL);
-	    timersub(&end_time, &start_time, &diff_time);
-	    diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	    printf("Deliver static events: %0.3f\n", diff);
-#endif
-
-#ifdef BREAKDOWN
-	    gettimeofday(&end_time, NULL);
-	    timersub(&end_time, &start_time, &diff_time);
-	    double diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	    deliver_time += diff;
-	    //printf("Deliver events: %0.3f\n", deliver_time);
-#endif
-	  }
+          PROFILING_START();
+          gpu_exc->deliver_static_events();
+          PROFILING_END("Deliver static events");
+        }
       }
 
       // preliminary update of nodes that use waveform relaxtion
       if ( kernel().node_manager.wfr_is_used() )
       {
-	std::cout << "doing wfr update" << std::endl;
+        std::cout << "doing wfr update" << std::endl;
         // std::cout << "another go" << std::endl;
-#pragma omp single
+        #pragma omp single
         {
           // if the end of the simulation is in the middle
           // of a min_delay_ step, we need to make a complete
@@ -808,39 +773,30 @@ nest::SimulationManager::update_()
         const std::vector< Node* >& thread_local_wfr_nodes =
           kernel().node_manager.get_wfr_nodes_on_thread( thrd );
 
-	std::cout << "thread_local_wfr_nodes " << thread_local_wfr_nodes.size() << std::endl;
-	for ( long n = 0; n < wfr_max_iterations_; ++n )
+        std::cout << "thread_local_wfr_nodes " << thread_local_wfr_nodes.size() << std::endl;
+        for ( long n = 0; n < wfr_max_iterations_; ++n )
         {
-	  bool done_p = true;
+          bool done_p = true;
 
-	  if (thrd < this->num_gpu_threads)
-	    {
-#ifdef PROFILING
-	      struct timeval start_time, end_time, diff_time;
-	      gettimeofday(&start_time, NULL);
-#endif
-
-	      done_p = gpu_exc->mass_wfr_update (thread_local_wfr_nodes, clock_, from_step_, to_step_);
-
-#ifdef PROFILING
-	      gettimeofday(&end_time, NULL);
-	      timersub(&end_time, &start_time, &diff_time);
-	      double diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	      printf("\nMass wfr update: %0.3f\n", diff);
-#endif
-
-	    }
-	  else
-	    {
-	      for ( std::vector< Node* >::const_iterator i =
-		      thread_local_wfr_nodes.begin();
-		    i != thread_local_wfr_nodes.end();
-		    ++i )
-		{
-		  done_p = wfr_update_( *i ) && done_p;
-		}
-	    }
-	  
+          if (isGPU)
+          {
+            PROFILING_START();
+            done_p = gpu_exc->mass_wfr_update (thread_local_wfr_nodes, clock_, from_step_, to_step_);
+            PROFILING_END("Mass wfr update");
+          }
+          else
+          {
+            PROFILING_START();
+            for ( std::vector< Node* >::const_iterator i =
+                  thread_local_wfr_nodes.begin();
+                  i != thread_local_wfr_nodes.end();
+                  ++i )
+            {
+              done_p = wfr_update_( *i ) && done_p;
+            }
+            PROFILING_END("Mass wfr update");
+          }
+      
           // this loop may be empty for those threads
           // that do not have any nodes requiring wfr_update
           //for ( std::vector< Node* >::const_iterator i =
@@ -858,22 +814,24 @@ nest::SimulationManager::update_()
           // printf("done: %d\n", done_p);
           // exit(1);
 
-// add done value of thread p to done vector
-#pragma omp critical
+          // add done value of thread p to done vector
+          #pragma omp critical
           done.push_back( done_p );
-// parallel section ends, wait until all threads are done -> synchronize
-#pragma omp barrier
 
-// the following block is executed by a single thread
-// the other threads wait at the end of the block
-#pragma omp single
+          /*******************************************************************************/
+          // parallel section ends, wait until all threads are done -> synchronize
+          #pragma omp barrier
+
+          // the following block is executed by a single thread
+          // the other threads wait at the end of the block
+          #pragma omp single
           {
             // set done_all
             for ( size_t i = 0; i < done.size(); i++ )
             {
               done_all = done[ i ] && done_all;
             }
-	    
+        
             // gather SecondaryEvents (e.g. GapJunctionEvents)
             kernel().event_delivery_manager.gather_events( done_all );
 
@@ -886,34 +844,25 @@ nest::SimulationManager::update_()
           // deliver SecondaryEvents generated during wfr_update
           // returns the done value over all threads
 
-	  if (thrd < this->num_gpu_threads)
-	    {
-#ifdef PROFILING
-	      gettimeofday(&start_time, NULL);
-#endif
-
-	      gpu_exc->clear_buffer();
-	      gpu_exc->pre_deliver_event(thread_local_wfr_nodes);
-	    }
-	  
+          if (isGPU)
+          {
+            PROFILING_START();
+            gpu_exc->clear_buffer();
+            gpu_exc->pre_deliver_event(thread_local_wfr_nodes);
+          }
+      
           done_p = kernel().event_delivery_manager.deliver_events( thrd );
 
-	  if (thrd < this->num_gpu_threads)
-	    {
-	      // //printf("built_connections: %d\n", hh_psc_alpha_gap::built_connections);
-	  
-	      gpu_exc->post_deliver_event(thread_local_wfr_nodes);
-	  
-	      //gpu_exc->copy_event_data(thread_local_wfr_nodes);
-
-#ifdef PROFILING
-	      gettimeofday(&end_time, NULL);
-	      timersub(&end_time, &start_time, &diff_time);
-	      diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	      printf("Deliver events: %0.3f\n", diff);
-#endif
-	    }
-	  
+          if (isGPU)
+          {
+            // //printf("built_connections: %d\n", hh_psc_alpha_gap::built_connections);
+      
+            gpu_exc->post_deliver_event(thread_local_wfr_nodes);
+      
+            //gpu_exc->copy_event_data(thread_local_wfr_nodes);
+            PROFILING_END("Deliver events");
+          }
+      
           if ( done_p )
           {
             max_iterations_reached = false;
@@ -921,7 +870,7 @@ nest::SimulationManager::update_()
           }
         } // of for (wfr_max_iterations) ...
 
-#pragma omp single
+        #pragma omp single
         {
           to_step_ = old_to_step;
           if ( max_iterations_reached )
@@ -943,53 +892,25 @@ nest::SimulationManager::update_()
       gettimeofday( &t_slice_begin_, NULL );
 
       if (thrd < this->num_gpu_threads)
-	{
-
-	  gpu_exc->update_type = 2;
-	  //if (gpu_exc->updated_nodes.empty())
-	}
+      {
+        gpu_exc->update_type = 2;
+        //if (gpu_exc->updated_nodes.empty())
+      }
       
       update_nodes(thread_local_nodes);
 
       if (thrd < this->num_gpu_threads)
-	{
+      {
+        PROFILING_START();
+        mass_update_nodes(gpu_exc->updated_nodes); //(thread_local_nodes);
+        PROFILING_END("Mass Update Nodes");
 
-#ifdef BREAKDOWN
-	  struct timeval start_time, end_time, diff_time;
-	  gettimeofday(&start_time, NULL);
-#endif
-
-	  mass_update_nodes(gpu_exc->updated_nodes); //(thread_local_nodes);
-
-#ifdef BREAKDOWN
-	  gettimeofday(&end_time, NULL);
-	  timersub(&end_time, &start_time, &diff_time);
-	  double diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	  update_time += diff;
-	  printf("Update: %0.3f\n-----\n", update_time);
-#endif
-
-#ifdef BREAKDOWN
-	  gettimeofday(&start_time, NULL);
-#endif
-
-	  gpu_exc->deliver_events();
-	  //gpu_exc->deliver_static_events();
+        PROFILING_START();
+        gpu_exc->deliver_events();
+        //gpu_exc->deliver_static_events();
+        PROFILING_END("Spike deliver");
+      }
       
-#ifdef BREAKDOWN
-	  gettimeofday(&end_time, NULL);
-	  timersub(&end_time, &start_time, &diff_time);
-	  diff = (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
-	  deliver_time += diff;
-	  printf("Spike deliver: %0.3f\n", deliver_time);
-#endif
-	  // std::cout << "start insert_events" << std::endl;
-	  // gpu_exc->insert_events();
-	  // std::cout << "end insert_events" << std::endl;
-	  //getchar();
-	}
-      
-
       gettimeofday( &t_slice_end_, NULL );
             
       if ( t_slice_end_.tv_sec != 0 )
@@ -1002,16 +923,16 @@ nest::SimulationManager::update_()
         // printf("\nupdate_nodes took %.2fms\n", t_real_ / 1e3);
       }
 
-// parallel section ends, wait until all threads are done -> synchronize
-#pragma omp barrier
+      /*************************************************************************************/
+      // parallel section ends, wait until all threads are done -> synchronize
+      #pragma omp barrier
 
-// the following block is executed by the master thread only
-// the other threads are enforced to wait at the end of the block
-#pragma omp master
+      // the following block is executed by the master thread only
+      // the other threads are enforced to wait at the end of the block
+      #pragma omp master
       {
-	// check if any thread in parallel section raised an exception
-        for ( index thrd = 0; thrd < kernel().vp_manager.get_num_threads();
-              ++thrd )
+        // check if any thread in parallel section raised an exception
+        for ( index thrd = 0; thrd < kernel().vp_manager.get_num_threads(); ++thrd )
         {
           if ( exceptions_raised.at( thrd ).valid() )
           {
@@ -1028,7 +949,7 @@ nest::SimulationManager::update_()
 
         advance_time_();
 
-	if ( SLIsignalflag != 0 )
+        if ( SLIsignalflag != 0 )
         {
           LOG( M_INFO,
             "SimulationManager::update",
@@ -1042,11 +963,9 @@ nest::SimulationManager::update_()
           print_progress_();
         }
       }
-// end of master section, all threads have to synchronize at this point
-#pragma omp barrier
-
-    } while (
-      to_do_ > 0 and not exit_on_user_signal_ and not exception_raised );
+      // end of master section, all threads have to synchronize at this point
+      #pragma omp barrier
+    } while (to_do_ > 0 and not exit_on_user_signal_ and not exception_raised );
 
     // End of the slice, we update the number of synaptic elements
     for ( std::vector< Node* >::const_iterator i =
@@ -1087,34 +1006,34 @@ nest::SimulationManager::update_nodes(const std::vector< Node * >& nodes)
     {
       model_gpu *model = this->gpu_execution[thrd];
       if (not model->updated_nodes.empty())
-	return;
+        return;
       for (
-	   std::vector< Node* >::const_iterator node = nodes.begin();
-	   node != nodes.end();
-	   ++node )
-	{
-	  // We update in a parallel region. Therefore, we need to catch
-	  // exceptions here and then handle them after the parallel region.
-	  if ( not( *node )->is_frozen() )
-	    {
-	      model->updated_nodes.push_back(*node);
-	    }
-	}
+        std::vector< Node* >::const_iterator node = nodes.begin();
+        node != nodes.end();
+        ++node )
+      {
+        // We update in a parallel region. Therefore, we need to catch
+        // exceptions here and then handle them after the parallel region.
+        if ( not( *node )->is_frozen() )
+          {
+            model->updated_nodes.push_back(*node);
+          }
+      }
     }
   else
     {
       for (
-	   std::vector< Node* >::const_iterator node = nodes.begin();
-	   node != nodes.end();
-	   ++node )
-	{
-	  // We update in a parallel region. Therefore, we need to catch
-	  // exceptions here and then handle them after the parallel region.
-	  if ( not( *node )->is_frozen() )
-	    {
-	      ( *node )->update( clock_, from_step_, to_step_ );
-	    }
-	}
+       std::vector< Node* >::const_iterator node = nodes.begin();
+       node != nodes.end();
+       ++node )
+      {
+        // We update in a parallel region. Therefore, we need to catch
+        // exceptions here and then handle them after the parallel region.
+        if ( not( *node )->is_frozen() )
+          {
+            ( *node )->update( clock_, from_step_, to_step_ );
+          }
+      }
     }
 }
 
