@@ -68,7 +68,7 @@ public:
    */
   void set_num_threads( thread n_threads );
 
-  void set_num_real_threads( thread n_threads );
+  //void set_num_real_threads( thread n_threads );
 
   /**
    * Get number of threads.
@@ -76,19 +76,23 @@ public:
    */
   index get_num_threads() const;
 
-  index get_num_real_threads() const;
+  //index get_num_real_threads() const;
 
-  index get_vp_per_thread() const;
+  //index get_vp_per_thread() const;
 
   /**
    * Omp set to num of threads
    */
-  void omp_set_threads();
+  //void omp_set_threads();
 
   /**
    * Omp set to real num of threads
    */
-  void omp_set_real_threads();
+  //void omp_set_real_threads();
+
+  int get_num_gpus() const;
+
+  int get_num_gpu_threads() const;
 
   /**
    * Return a thread number for a given global node id.
@@ -138,8 +142,10 @@ public:
 private:
   const bool force_singlethreading_;
   index n_threads_; //!< Number of threads per process.
-  index n_real_threads_;
-  index vp_per_thread_;
+  //index n_real_threads_;
+  //index vp_per_thread_;
+  int n_gpus_;
+  int n_gpu_threads_;
 };
 }
 
@@ -159,16 +165,28 @@ nest::VPManager::get_num_threads() const
   return n_threads_;
 }
 
-inline nest::index
-nest::VPManager::get_num_real_threads() const
+inline int
+nest::VPManager::get_num_gpus() const
 {
-  return n_real_threads_;
+  return n_gpus_;
 }
 
-inline nest::index 
-nest::VPManager::get_vp_per_thread() const
+inline int
+nest::VPManager::get_num_gpu_threads() const
 {
-  return vp_per_thread_;
+  return n_gpu_threads_;
 }
+
+// inline nest::index
+// nest::VPManager::get_num_real_threads() const
+// {
+//   return n_real_threads_;
+// }
+
+// inline nest::index 
+// nest::VPManager::get_vp_per_thread() const
+// {
+//   return vp_per_thread_;
+// }
 
 #endif /* VP_MANAGER_H */

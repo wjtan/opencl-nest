@@ -341,8 +341,9 @@ extern const Name noisy_rate;         //!< Specific to rate models
 extern const Name no_synapses;        //!< Used by stdp_connection_facetshw_hom
 extern const Name num_connections;    //!< In ConnBuilder
 extern const Name num_processes;      //!< Number of processes
-extern const Name num_real_threads;
-extern const Name num_gpu;
+//extern const Name num_real_threads;
+extern const Name num_gpus;
+extern const Name num_gpu_threads;
 extern const Name number_of_children; //!< Used by Subnet
 
 extern const Name off_grid_spiking; //!< Used by event_delivery_manager

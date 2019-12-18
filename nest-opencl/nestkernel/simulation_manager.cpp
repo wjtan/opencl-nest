@@ -357,12 +357,7 @@ nest::SimulationManager::set_status( const DictionaryDatum& d )
     }
   }
 
-
-  long num_gpu;
-  if ( updateValue< long >( d, names::num_gpu, num_gpu ) )
-  {
-    this->num_gpu_threads = num_gpu;
-  }
+  this->num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
 }
 
 void
@@ -385,8 +380,6 @@ nest::SimulationManager::get_status( DictionaryDatum& d )
   def< double >( d, names::wfr_tol, wfr_tol_ );
   def< long >( d, names::wfr_max_iterations, wfr_max_iterations_ );
   def< long >( d, names::wfr_interpolation_order, wfr_interpolation_order_ );
-
-  def< long >( d, names::num_gpu, num_gpu_threads );
 }
 
 bool
@@ -692,12 +685,20 @@ nest::SimulationManager::update_()
   #pragma omp parallel
   {
     const int thrd = kernel().vp_manager.get_thread_id();
-    const int vp_per_thread = kernel().vp_manager.get_vp_per_thread();
+    // const int vp_per_thread = kernel().vp_manager.get_vp_per_thread();
 
     iaf_psc_alpha_gpu* gpu_exc;
     PROFILING_INIT();
 
     const bool isGPU = this->isGPU();
+
+    #pragma omp critical
+    cout << "[" << thrd << "] GPU: " << isGPU << endl;
+
+    //#pragma omp master
+    //{
+    //  gpu_execution[0]->in
+    //}
 
     if (isGPU)
     {

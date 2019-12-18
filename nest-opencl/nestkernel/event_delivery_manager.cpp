@@ -575,6 +575,7 @@ EventDeliveryManager::deliver_events( thread t )
         {
       	  if (isGPU)
           {
+            // Batch send
 	          kernel().simulation_manager.gpu_execution[t]->deliver_events();
           }
           --lag;

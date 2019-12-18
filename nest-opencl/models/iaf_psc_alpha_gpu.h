@@ -57,7 +57,7 @@ namespace nest
     void insert_static_event(SpikeEvent &e);
     
     void handle( SpikeEvent& e );
-void handle( CurrentEvent& e );
+    void handle( CurrentEvent& e );
     void advance_time();  
   private:
 
