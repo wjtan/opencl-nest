@@ -229,14 +229,15 @@ nest::VPManager::set_status( const DictionaryDatum& d )
     this->n_gpus_ = n_gpus;
   }
 
+  int n_gpu_threads = get_num_gpu_threads();
+  if ( updateValue< long >( d, names::num_gpu_threads, n_gpu_threads ) )
+  {
+    this->n_gpu_threads_ = n_gpu_threads;
+  }
+
+  // If no gpu, set gpu threads to zero
   if (this->n_gpus_ == 0) {
     this->n_gpu_threads_ = 0;
-  } else {
-    int n_gpu_threads = get_num_gpu_threads();
-    if ( updateValue< long >( d, names::num_gpu_threads, n_gpu_threads ) )
-    {
-      this->n_gpu_threads_ = n_gpu_threads;
-    }
   }
 }
 
@@ -266,6 +267,13 @@ nest::VPManager::set_num_threads( nest::thread n_threads )
   omp_set_num_threads( n_threads_ );
 #endif
 }
+
+void
+nest::VPManager::set_num_gpus( int n_gpus )
+{
+  this->n_gpus_ = n_gpus;
+}
+
 
 // void
 // nest::VPManager::set_num_real_threads( nest::thread n_threads )

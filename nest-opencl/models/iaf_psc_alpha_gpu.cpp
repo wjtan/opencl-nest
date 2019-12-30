@@ -8,10 +8,6 @@
 #include "vp_manager_impl.h"
 #include "profile.h"
 
-#ifdef PROFILING
-#include <sys/time.h>
-#endif
-
 nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
 cl::Context nest::iaf_psc_alpha_gpu::context;
 cl::Program nest::iaf_psc_alpha_gpu::program;
@@ -253,14 +249,17 @@ nest::iaf_psc_alpha_gpu::mass_update_( const std::vector<Node *> &nodes,
 
   PROFILING_START();
   for (int nodeid = this->num_local_nodes - 2; nodeid < nodes.size(); nodeid++)
-    if (called_from_wfr_update)
+    if (called_from_wfr_update) {
       nodes[nodeid]->wfr_update(origin, from, to);
-    else
+    } else {
       nodes[nodeid]->update(origin, from, to);
+    }
+  PROFILING_END("Node Update");
 
+  PROFILING_START();
   copy_data_from_device(nodes, true);
   synchronize();
-  PROFILING_END("Poisson");
+  PROFILING_END("Last DtH");
 
   return true;
 }
@@ -316,6 +315,13 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
         return 1;
       }
 
+      const int n_devices = gpu_context.list_device.size();
+      const int n_gpus = kernel().vp_manager.get_num_gpus();
+      if (n_devices < n_gpus) {
+        kernel().vp_manager.set_num_gpus(n_devices);
+        std::cout << "Set num of GPUS=" << n_devices << " (" << n_gpus << ")" << std::endl;
+      }
+
     }
     catch (const cl::Error &err) {
       std::cerr
@@ -337,14 +343,9 @@ nest::iaf_psc_alpha_gpu::initialize_command_queue()
 
   try
   {
-    int num_devices = gpu_context.list_device.size();
-    if (num_devices > num_gpus) {
-      num_devices = num_gpus;
-    }
-
     //printf("[%d] Num of Devices: %d\n", thrd_id, num_devices);
 
-    this->command_queue = cl::CommandQueue(context, gpu_context.list_device[vp_id % num_devices]);
+    this->command_queue = cl::CommandQueue(context, gpu_context.list_device[vp_id % num_gpus]);
   }
   catch (const cl::Error &err) {
     std::cerr
@@ -504,9 +505,8 @@ nest::iaf_psc_alpha_gpu::copy_data_to_device(const std::vector< Node* > &nodes)
   std::vector<Node *>::const_iterator nodeIt = nodes.begin();
 
   for (int i = 0; nodeIt != nodes.end(); nodeIt++, i++ )
-    {
-
-      nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
+  {
+    nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
 
 UPLOAD_1D_DATA(h_S__y3_, S_.y3_);
 UPLOAD_1D_DATA(h_P__Theta_, P_.Theta_);

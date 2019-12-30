@@ -36,7 +36,6 @@
 
 // Includes from sli:
 #include "dictutils.h"
-
 #include "profile.h"
 
 namespace nest

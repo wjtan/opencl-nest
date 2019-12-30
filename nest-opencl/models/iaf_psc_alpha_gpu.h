@@ -79,7 +79,7 @@ namespace nest
 
     typedef struct connection_info {
       int tgt_id;
-      double weight;      
+      double weight;
     } connection_info;
     
     vector< vector<connection_info> > connections;

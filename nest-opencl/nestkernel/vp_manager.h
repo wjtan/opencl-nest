@@ -92,6 +92,8 @@ public:
 
   int get_num_gpus() const;
 
+  void set_num_gpus( int n_gpus );
+
   int get_num_gpu_threads() const;
 
   /**

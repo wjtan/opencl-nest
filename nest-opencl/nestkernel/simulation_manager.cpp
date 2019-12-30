@@ -692,8 +692,8 @@ nest::SimulationManager::update_()
 
     const bool isGPU = this->isGPU();
 
-    #pragma omp critical
-    cout << "[" << thrd << "] GPU: " << isGPU << endl;
+    //#pragma omp critical
+    //cout << "[" << thrd << "] GPU: " << isGPU << endl;
 
     //#pragma omp master
     //{
