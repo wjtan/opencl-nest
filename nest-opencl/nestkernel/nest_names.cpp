@@ -292,6 +292,8 @@ const Name network_size( "network_size" );
 const Name next_readout_time( "next_readout_time" );
 const Name NMDA( "NMDA" );
 const Name node_uses_wfr( "node_uses_wfr" );
+const Name nodes_per_cpu_thread( "nodes_per_cpu_thread" );
+const Name nodes_per_gpu_thread( "nodes_per_gpu_thread" );
 const Name noise( "noise" );
 const Name noisy_rate( "noisy_rate" );
 const Name no_synapses( "no_synapses" );

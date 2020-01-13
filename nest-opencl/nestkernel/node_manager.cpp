@@ -44,7 +44,7 @@
 
 // Includes from sli:
 #include "dictutils.h"
-
+#include <stdio.h>
 namespace nest
 {
 
@@ -59,6 +59,8 @@ NodeManager::NodeManager()
   , wfr_is_used_( false )
   , nodes_vec_network_size_( 0 ) // zero to force update
   , num_active_nodes_( 0 )
+  , nodes_per_gpu_thread( 1 )
+  , nodes_per_cpu_thread( 1 )
 {
 }
 
@@ -256,6 +258,22 @@ index NodeManager::add_node( index mod, long n ) // no_p
       }
     }
 
+    int total_threads = kernel().vp_manager.get_num_threads();
+    int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
+    int num_cpu_threads = total_threads - num_gpu_threads;
+
+    int num_gpu_nodes = num_gpu_threads * nodes_per_gpu_thread;
+    int num_cpu_nodes = num_cpu_threads * nodes_per_cpu_thread;
+    int bucket = num_gpu_nodes + num_cpu_nodes;
+    
+    //printf("total_threads: %d\n", total_threads);
+    //printf("num_gpu_threads: %d\n", num_gpu_threads);
+    //printf("num_cpu_threads: %d\n", num_cpu_threads);
+    printf("1) num_gpu_nodes: %d\n", num_gpu_nodes);
+    printf("1) num_cpu_nodes: %d\n", num_cpu_nodes);
+    //printf("bucket: %d\n", bucket);
+    //getchar();
+
     for ( size_t gid = min_gid; gid < max_gid; ++gid )
     {
       const thread vp = kernel().vp_manager.suggest_rec_vp( get_n_gsd() );
@@ -263,10 +281,19 @@ index NodeManager::add_node( index mod, long n ) // no_p
 
       if ( kernel().vp_manager.is_local_vp( vp ) )
       {
-        Node* newnode = model->allocate( t );
+        int _thread = t;
+        int k = gid % bucket;
+        if (k < num_gpu_nodes)
+          _thread = gid % num_gpu_threads;
+        else
+          _thread = gid % num_cpu_threads + num_gpu_threads;
+
+        //printf("gid: %d t: %d k: %d _thread: %d\n", gid, t, k, _thread);
+
+        Node* newnode = model->allocate( _thread );
         newnode->set_gid_( gid );
         newnode->set_model_id( mod );
-        newnode->set_thread( t );
+        newnode->set_thread( _thread );
         newnode->set_vp( vp );
         newnode->set_has_proxies( true );
         newnode->set_local_receiver( false );
@@ -328,6 +355,22 @@ index NodeManager::add_node( index mod, long n ) // no_p
     // become irrelevant.
     current_->add_gid_range( min_gid, max_gid - 1 );
 
+    int total_threads = kernel().vp_manager.get_num_threads();
+    int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
+    int num_cpu_threads = total_threads - num_gpu_threads;
+
+    int num_gpu_nodes = num_gpu_threads * nodes_per_gpu_thread;
+    int num_cpu_nodes = num_cpu_threads * nodes_per_cpu_thread;
+    int bucket = num_gpu_nodes + num_cpu_nodes;
+
+    //printf("total_threads: %d\n", total_threads);
+    //printf("num_gpu_threads: %d\n", num_gpu_threads);
+    //printf("num_cpu_threads: %d\n", num_cpu_threads);
+    printf("2) num_gpu_nodes: %d\n", num_gpu_nodes);
+    printf("2) num_cpu_nodes: %d\n", num_cpu_nodes);
+    //printf("bucket: %d\n", bucket);
+    //getchar();
+
     // min_gid is first valid gid i should create, hence ask for the first local
     // gid after min_gid-1
     while ( gid < max_gid )
@@ -337,10 +380,19 @@ index NodeManager::add_node( index mod, long n ) // no_p
 
       if ( kernel().vp_manager.is_local_vp( vp ) )
       {
-        Node* newnode = model->allocate( t );
+        int _thread = t;
+        int k = gid % bucket;
+        if (k < num_gpu_nodes)
+            _thread = gid % num_gpu_threads;
+        else
+            _thread = gid % num_cpu_threads + num_gpu_threads;
+        
+        //printf("gid: %d t: %d k: %d _thread: %d\n", gid, t, k, _thread);
+
+        Node* newnode = model->allocate( _thread );
         newnode->set_gid_( gid );
         newnode->set_model_id( mod );
-        newnode->set_thread( t );
+        newnode->set_thread( _thread );
         newnode->set_vp( vp );
 
         local_nodes_.add_local_node( *newnode ); // put into local nodes list
@@ -953,7 +1005,6 @@ NodeManager::print( index p, int depth )
 void
 NodeManager::set_status( index gid, const DictionaryDatum& d )
 {
-
   assert( gid > 0 or "This function cannot be called for the root node." );
   if ( gid > 0 )
   {
@@ -996,11 +1047,30 @@ NodeManager::get_status( DictionaryDatum& d )
     s << cit->first;
     ( *cdict )[ s.str() ] = cit->second;
   }
+
+  def< long >( d, names::nodes_per_cpu_thread, (long) nodes_per_cpu_thread );
+  def< long >( d, names::nodes_per_gpu_thread, (long) nodes_per_gpu_thread );
 }
 
 void
 NodeManager::set_status( const DictionaryDatum& d )
 {
+  int nodes_per_cpu_thread = this->nodes_per_cpu_thread;
+  if ( updateValue< long >( d, names::nodes_per_cpu_thread, nodes_per_cpu_thread ) )
+  {
+    //printf("Set nodes_per_cpu_thread: %d\n", nodes_per_cpu_thread);
+    if (nodes_per_cpu_thread > 0) {
+      this->nodes_per_cpu_thread = nodes_per_cpu_thread;
+    }
+  }
+
+  int nodes_per_gpu_thread = this->nodes_per_gpu_thread;
+  if ( updateValue< long >( d, names::nodes_per_gpu_thread, nodes_per_gpu_thread ) )
+  {
+    //printf("Set nodes_per_gpu_thread: %d\n", nodes_per_gpu_thread);
+    this->nodes_per_gpu_thread = nodes_per_gpu_thread;
+  }
+
   std::string tmp;
   // proceed only if there are unaccessed items left
   if ( not d->all_accessed( tmp ) )

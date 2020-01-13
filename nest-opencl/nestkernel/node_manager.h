@@ -243,6 +243,9 @@ public:
    * Number of process-local nodes.
    */
   size_t local_nodes_size() const;
+  
+  size_t nodes_per_gpu_thread;
+  size_t nodes_per_cpu_thread;
 
 private:
   /**
