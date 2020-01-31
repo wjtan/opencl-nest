@@ -156,8 +156,11 @@ public:
   // TODO: rename / precisely how defined?
   delay get_to_step() const;
 
+  //void incSpikes();
+
   // If thread is GPU
   bool isGPU() const;
+  bool isGPU(thread thrd) const;
 
   std::vector<model_gpu*> gpu_execution;
   int update_type;
@@ -199,7 +202,7 @@ private:
                             //!< relaxation
   size_t wfr_interpolation_order_; //!< interpolation order for waveform
                                    //!< relaxation method
-
+  //long *spikes;
 };
 
 inline Time const&

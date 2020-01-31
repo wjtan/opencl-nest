@@ -67,8 +67,11 @@ set( models_sources
     iaf_cond_exp_sfa_rr.h iaf_cond_exp_sfa_rr.cpp
     iaf_cond_exp_sfa_rr_gpu.h iaf_cond_exp_sfa_rr_gpu.cpp iaf_cond_exp_sfa_rr_build_graph.cpp
     iaf_neuron.h iaf_neuron.cpp
-    iaf_psc_alpha.h iaf_psc_alpha.cpp
-    iaf_psc_alpha_gpu.h iaf_psc_alpha_gpu.cpp iaf_psc_alpha_build_graph.cpp
+    iaf_psc_alpha.h iaf_psc_alpha.cpp iaf_psc_alpha_build_graph.cpp
+    
+    iaf_psc_alpha_gpu.h iaf_psc_alpha_gpu.cpp
+    iaf_psc_alpha_cpu_kernel.h iaf_psc_alpha_cpu_kernel.cpp iaf_psc_alpha_cpu.h iaf_psc_alpha_cpu.cpp
+    
     iaf_psc_alpha_multisynapse.h iaf_psc_alpha_multisynapse.cpp
     iaf_psc_exp_multisynapse.h iaf_psc_exp_multisynapse.cpp
     iaf_psc_delta.h iaf_psc_delta.cpp
