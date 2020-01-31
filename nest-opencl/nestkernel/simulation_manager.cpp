@@ -746,12 +746,9 @@ nest::SimulationManager::update_()
     {
       PROFILING_START();
 
-      gpu_exc->total_num_nodes = kernel().node_manager.size();
+      //gpu_exc->total_num_nodes = kernel().node_manager.size();
       gpu_exc->initialize_nodes(thread_local_nodes);
       //gpu_exc->num_local_nodes = thread_local_nodes.size();
-
-      cout << "Total num nodes " << gpu_exc->total_num_nodes << endl;
-      cout << "num_local_nodes " << gpu_exc->num_local_nodes << endl;
 
       cout << "[" << thrd << "] init_device" << endl;
       kernel().event_delivery_manager.deliver_build_graph_events( thrd );

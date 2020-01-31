@@ -140,7 +140,7 @@ nest::iaf_psc_alpha_cpu::initialize_gpu()
       //    return;
       //}
 
-      int total_num_nodes = kernel().node_manager.size();
+      this->total_num_nodes = kernel().node_manager.size();
       connections.resize(total_num_nodes);
       is_gpu_initialized = true;
     }
