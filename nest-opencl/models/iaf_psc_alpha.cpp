@@ -371,6 +371,8 @@ iaf_psc_alpha::update( Time const& origin, const long from, const long to )
       set_spiketime( Time::step( origin.get_steps() + lag + 1 ) );
       SpikeEvent se;
       kernel().event_delivery_manager.send( *this, se, lag );
+
+      //kernel().simulation_manager.incSpikes();
     }
 
     // set new input current
@@ -393,13 +395,13 @@ iaf_psc_alpha::handle( SpikeEvent& e )
   //   }
   // START GPU EVENT HANDLE
   const int thrd = kernel().vp_manager.get_thread_id();
-  if (thrd < kernel().simulation_manager.num_gpu_threads)
-    {
-      kernel().simulation_manager.gpu_execution[thrd]->insert_event(e);
-      // END GPU EVENT HANDLE
+  if(kernel().simulation_manager.isGPU(thrd))
+  {
+    kernel().simulation_manager.gpu_execution[thrd]->insert_event(e);
+    // END GPU EVENT HANDLE
 
-      return;
-    }
+    return;
+  }
   
   const double s = e.get_weight() * e.get_multiplicity();
 

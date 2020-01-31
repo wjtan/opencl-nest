@@ -160,15 +160,16 @@ public:
     e.set_delay( get_delay_steps() );
     Node *target = get_target( t );
 
-    if (t < kernel().simulation_manager.num_gpu_threads)
-      {
-	Event* e_ptr = &e;
-	bool b = dynamic_cast<DSSpikeEvent*>(e_ptr) == NULL;
-	model_gpu* gpu_exc = kernel().simulation_manager.gpu_execution[t];
-	bool n = target->get_thread_lid() < gpu_exc->num_local_nodes - 2;
-	if (b && n && gpu_exc->init_device)
-	  return;
-      }
+    if (kernel().simulation_manager.isGPU(t))
+    {
+      Event* e_ptr = &e;
+      model_gpu* gpu_exc = kernel().simulation_manager.gpu_execution[t];
+      //bool n = target->get_thread_lid() < gpu_exc->num_local_nodes - 2;
+      if (dynamic_cast<DSSpikeEvent*>(e_ptr) == NULL &&
+          gpu_exc->init_device &&
+          gpu_exc->isLocalNode(target->get_thread_lid()))
+        return;
+    }
     e.set_weight( weight_ );
     
     e.set_receiver( *target );

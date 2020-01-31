@@ -11,7 +11,7 @@
 // #define PROFILING_SIZE
 #include "profile.h"
 
-#define OFFSET 2
+const size_t OFFSET = 0;
 
 extern void writeNodes(nest::thread t, int count, double* nodes, size_t num_nodes);
 
@@ -71,9 +71,9 @@ nest::iaf_psc_alpha_cpu::iaf_psc_alpha_cpu()
 //, h_in_spikes__index( NULL )
   , h_spike_count (NULL)
   , isHistory (false)
-  , h_history_ptr (NULL)
-  , h_Kminus_ (NULL)
-  , h_tau_minus_inv_ (NULL)
+//  , h_history_ptr (NULL)
+//  , h_Kminus_ (NULL)
+//  , h_tau_minus_inv_ (NULL)
 
 {
 }
@@ -160,8 +160,7 @@ nest::iaf_psc_alpha_cpu::initialize_nodes(const std::vector< Node* > &nodes) {
       otherNodes.push_back(*node);
     }
   }
-  //num_local_nodes = actualNodes.size();
-  actual_num_nodes = actualNodes.size();
+  this->num_local_nodes = actualNodes.size();
 
   // //FIXME
   // total_num_nodes = actualNodes.size();
@@ -244,8 +243,7 @@ nest::iaf_psc_alpha_cpu::mass_update_( const std::vector<Node *> &nodes,
     //PROFILING_START();
 
     //fill_buffer_zero_uint(&gpu_context, d_spike_count, this->num_local_nodes*sizeof(unsigned int));
-    //for(size_t i = 0; i < this->num_local_nodes; i++){
-    for(size_t i = 0; i < this->actual_num_nodes; i++){
+    for(size_t i = 0; i < this->num_local_nodes; i++){
       h_spike_count[i] = 0;
     }
     //synchronize();
@@ -257,12 +255,11 @@ nest::iaf_psc_alpha_cpu::mass_update_( const std::vector<Node *> &nodes,
     //execute_kernel(this->gpu_kernel, &gpu_context, this->num_local_nodes);
     
 
-    //for(size_t tid = 0; tid < this->num_local_nodes - OFFSET; tid++) {
-    for(size_t tid = 0; tid < this->actual_num_nodes; tid++) {
+    for(size_t tid = 0; tid < this->num_local_nodes - OFFSET; tid++) {
 
 kernel_update(
   tid,
-  actual_num_nodes,//this->num_local_nodes - OFFSET,
+  this->num_local_nodes - OFFSET,
       lag,
   this->event_size,
       ////
@@ -488,9 +485,9 @@ nest::iaf_psc_alpha_cpu::initialize_device()
     {
       cout << "initialize_device" << endl;
       int thrd_id = kernel().vp_manager.get_thread_id();
-      int len = this->actual_num_nodes;//this->num_local_nodes;
+      int len = this->num_local_nodes;
       //setlocale(LC_NUMERIC, "");
-      printf("[%d] Num of nodes: %ld\n", thrd_id, this->actual_num_nodes);
+      printf("[%d] Num of nodes: %ld\n", thrd_id, this->num_local_nodes);
       //printf("[%d] Double: %'ld Int: %'ld\n", thrd_id, 26 * len * sizeof(double), 3 * len * sizeof(int));
       
       h_S__y3_ = new double[len];
@@ -1035,10 +1032,8 @@ nest::iaf_psc_alpha_cpu::initialize()
     cout << "initialize: Setup Ring Buffers" << endl;
     event_size = kernel().connection_manager.get_min_delay()
       + kernel().connection_manager.get_max_delay();
-    //ring_buffer_size = (this->num_local_nodes - OFFSET) * event_size;
-    ring_buffer_size = actual_num_nodes * event_size;
-    //cout << "RingBuffer Size: " << ring_buffer_size << " " << this->num_local_nodes << " X " << event_size << endl;
-    cout << "RingBuffer Size: " << ring_buffer_size << " " << actual_num_nodes << " X " << event_size << endl;
+    ring_buffer_size = (this->num_local_nodes - OFFSET) * event_size;
+    cout << "RingBuffer Size: " << ring_buffer_size << " " << this->num_local_nodes << " X " << event_size << endl;
     h_currents_.resize(ring_buffer_size);// = new double[ring_buffer_size];
     h_ex_spikes_.resize(ring_buffer_size);// = new double[ring_buffer_size];
     h_in_spikes_.resize(ring_buffer_size);// = new double[ring_buffer_size];
@@ -1170,7 +1165,7 @@ nest::iaf_psc_alpha_cpu::deliver_events()
   // update_type = 1 -- first update
   // update_type = 2 -- regular update (with multiplicity)
 
-  int batch_size = list_spikes.size();
+  size_t batch_size = list_spikes.size();
   //cout << "batch_size " << batch_size << endl;
   // getchar();
 
@@ -1282,7 +1277,7 @@ nest::iaf_psc_alpha_cpu::deliver_events()
     for(size_t tid = 0; tid < batch_size; tid++) {
 kernel_deliver_events_stdp_pl(
   tid,
-  this->actual_num_nodes, //this->num_local_nodes - OFFSET,
+  this->num_local_nodes - OFFSET,
   batch_size,
              event_size,
              // History
@@ -1375,7 +1370,7 @@ kernel_deliver_events_stdp_pl(
 void
 nest::iaf_psc_alpha_cpu::deliver_static_events()
 {
-  int static_batch_size = list_sgid.size();
+  size_t static_batch_size = list_sgid.size();
   // cout << "static_batch_size " << static_batch_size << endl;
   // getchar();
   
@@ -1416,7 +1411,7 @@ nest::iaf_psc_alpha_cpu::deliver_static_events()
     //set_static_deliver_kernel_args(this->static_deliver_kernel, this->num_local_nodes, static_batch_size);
     //execute_kernel(this->static_deliver_kernel, &gpu_context, static_batch_size * 32 * 4);
 
-    kernel_deliver_events(actual_num_nodes, //this->num_local_nodes - OFFSET,
+    kernel_deliver_events(this->num_local_nodes - OFFSET,
            event_size,
            h_connections_ptr,
            h_connections,
@@ -1691,6 +1686,11 @@ void
 nest::iaf_psc_alpha_cpu::advance_time()
 {
   time_index = (time_index + kernel().connection_manager.get_min_delay()) % event_size;
+}
+
+inline
+bool nest::iaf_psc_alpha_cpu::isLocalNode(nest::index i) const {
+  return i < this->num_local_nodes - OFFSET;
 }
 
 #include <fstream>

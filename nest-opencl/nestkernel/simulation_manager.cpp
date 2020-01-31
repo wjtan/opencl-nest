@@ -748,7 +748,7 @@ nest::SimulationManager::update_()
 
       gpu_exc->total_num_nodes = kernel().node_manager.size();
       gpu_exc->initialize_nodes(thread_local_nodes);
-      gpu_exc->num_local_nodes = thread_local_nodes.size();
+      //gpu_exc->num_local_nodes = thread_local_nodes.size();
 
       cout << "Total num nodes " << gpu_exc->total_num_nodes << endl;
       cout << "num_local_nodes " << gpu_exc->num_local_nodes << endl;

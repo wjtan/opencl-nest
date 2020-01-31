@@ -222,6 +222,8 @@ public:
 // Implementation of class STDPPLConnectionHom.
 //
 
+#include <sys/time.h>
+
 /**
  * Send an event to the receiver of this connection.
  * \param e The event to send
@@ -237,22 +239,31 @@ STDPPLConnectionHom< targetidentifierT >::send( Event& e,
 {
   // synapse STDP depressing/facilitation dynamics
 
+  //struct timeval start_time, end_time, diff_time;
+  //gettimeofday(&start_time, NULL);
+
   Node* target = get_target( t );
 
-  if (t < kernel().simulation_manager.num_gpu_threads)
-    {
-      if (!kernel().simulation_manager.gpu_execution[t]->init_device)
-	return;
-
-      e.set_receiver( *target );
-      //se.set_weight( weight_ );
-      e.set_delay( get_delay_steps() );
-      e.set_rport( get_rport() );
-
-      kernel().simulation_manager.gpu_execution[t]->handle(e, t_lastspike, (const CommonSynapseProperties *) &cp, (void *)this, 2);
-
+  if (kernel().simulation_manager.isGPU(t))
+  {
+    if (!kernel().simulation_manager.gpu_execution[t]->init_device)
       return;
-    }
+
+    e.set_receiver( *target );
+    //se.set_weight( weight_ );
+    e.set_delay( get_delay_steps() );
+    e.set_rport( get_rport() );
+
+    kernel().simulation_manager.gpu_execution[t]->handle(e, t_lastspike, (const CommonSynapseProperties *) &cp, (void *)this, 2);
+
+    //gettimeofday(&end_time, NULL);
+    //timersub(&end_time, &start_time, &diff_time);
+    //kernel().connection_manager.connectionTimeG[t] += (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
+
+    //kernel().connection_manager.sendCountG[t] += 1;
+
+    return;
+  }
   double t_spike = e.get_stamp().get_ms();
 
   // t_lastspike_ = 0 initially
@@ -291,6 +302,12 @@ STDPPLConnectionHom< targetidentifierT >::send( Event& e,
 
   Kplus_ =
     Kplus_ * std::exp( ( t_lastspike - t_spike ) * cp.tau_plus_inv_ ) + 1.0;
+
+  //gettimeofday(&end_time, NULL);
+  //timersub(&end_time, &start_time, &diff_time);
+  //kernel().connection_manager.connectionTimeC[t] += (double)diff_time.tv_sec*1000 + (double)diff_time.tv_usec/1000;
+
+  //kernel().connection_manager.sendCountC[t] += 1;
 }
 
 template < typename targetidentifierT >

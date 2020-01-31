@@ -62,7 +62,9 @@ namespace nest
     
     void handle( SpikeEvent& e );
     void handle( CurrentEvent& e );
-    void advance_time();  
+    void advance_time();
+
+    bool isLocalNode(const index i) const;
   private:
 
     // struct clContext_
@@ -165,8 +167,6 @@ namespace nest
 //     cl::Buffer d_spike_count;
 
 /***************************************/
-size_t actual_num_nodes;
-
 // Nodes
 double* h_S__y3_;
 double* h_P__Theta_;

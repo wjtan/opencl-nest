@@ -6,6 +6,8 @@
 #include "kernel_manager.h"
 #include "universal_data_logger_impl.h"
 #include "vp_manager_impl.h"
+
+// #define PROFILING_SIZE
 #include "profile.h"
 
 nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
@@ -75,47 +77,47 @@ nest::iaf_psc_alpha_gpu::~iaf_psc_alpha_gpu()
 {
   if (h_connections_ptr) delete[] h_connections_ptr;
   if (h_connections) delete[] h_connections;
-if (h_S__y3_) delete[] h_S__y3_;
-if (h_P__Theta_) delete[] h_P__Theta_;
-if (h_V__P22_ex_) delete[] h_V__P22_ex_;
-if (h_V__P21_in_) delete[] h_V__P21_in_;
-if (h_S__dI_ex_) delete[] h_S__dI_ex_;
-if (h_P__I_e_) delete[] h_P__I_e_;
-if (h_V__IPSCInitialValue_) delete[] h_V__IPSCInitialValue_;
-if (h_V__P31_ex_) delete[] h_V__P31_ex_;
-if (h_S__I_in_) delete[] h_S__I_in_;
-if (h_V__expm1_tau_m_) delete[] h_V__expm1_tau_m_;
-if (h_S__r_) delete[] h_S__r_;
-if (h_S__I_ex_) delete[] h_S__I_ex_;
-if (h_V__P21_ex_) delete[] h_V__P21_ex_;
-if (h_P__LowerBound_) delete[] h_P__LowerBound_;
-if (h_V__P22_in_) delete[] h_V__P22_in_;
-if (h_V__weighted_spikes_ex_) delete[] h_V__weighted_spikes_ex_;
-if (h_V__P11_in_) delete[] h_V__P11_in_;
-if (h_V__weighted_spikes_in_) delete[] h_V__weighted_spikes_in_;
-if (h_V__P31_in_) delete[] h_V__P31_in_;
-if (h_V__EPSCInitialValue_) delete[] h_V__EPSCInitialValue_;
-if (h_V__P32_ex_) delete[] h_V__P32_ex_;
-if (h_V__P11_ex_) delete[] h_V__P11_ex_;
-if (h_S__dI_in_) delete[] h_S__dI_in_;
-if (h_P__V_reset_) delete[] h_P__V_reset_;
-if (h_V__RefractoryCounts_) delete[] h_V__RefractoryCounts_;
-if (h_V__P30_) delete[] h_V__P30_;
-if (h_V__P32_in_) delete[] h_V__P32_in_;
-if (h_S__y0_) delete[] h_S__y0_;
+  if (h_S__y3_) delete[] h_S__y3_;
+  if (h_P__Theta_) delete[] h_P__Theta_;
+  if (h_V__P22_ex_) delete[] h_V__P22_ex_;
+  if (h_V__P21_in_) delete[] h_V__P21_in_;
+  if (h_S__dI_ex_) delete[] h_S__dI_ex_;
+  if (h_P__I_e_) delete[] h_P__I_e_;
+  if (h_V__IPSCInitialValue_) delete[] h_V__IPSCInitialValue_;
+  if (h_V__P31_ex_) delete[] h_V__P31_ex_;
+  if (h_S__I_in_) delete[] h_S__I_in_;
+  if (h_V__expm1_tau_m_) delete[] h_V__expm1_tau_m_;
+  if (h_S__r_) delete[] h_S__r_;
+  if (h_S__I_ex_) delete[] h_S__I_ex_;
+  if (h_V__P21_ex_) delete[] h_V__P21_ex_;
+  if (h_P__LowerBound_) delete[] h_P__LowerBound_;
+  if (h_V__P22_in_) delete[] h_V__P22_in_;
+  if (h_V__weighted_spikes_ex_) delete[] h_V__weighted_spikes_ex_;
+  if (h_V__P11_in_) delete[] h_V__P11_in_;
+  if (h_V__weighted_spikes_in_) delete[] h_V__weighted_spikes_in_;
+  if (h_V__P31_in_) delete[] h_V__P31_in_;
+  if (h_V__EPSCInitialValue_) delete[] h_V__EPSCInitialValue_;
+  if (h_V__P32_ex_) delete[] h_V__P32_ex_;
+  if (h_V__P11_ex_) delete[] h_V__P11_ex_;
+  if (h_S__dI_in_) delete[] h_S__dI_in_;
+  if (h_P__V_reset_) delete[] h_P__V_reset_;
+  if (h_V__RefractoryCounts_) delete[] h_V__RefractoryCounts_;
+  if (h_V__P30_) delete[] h_V__P30_;
+  if (h_V__P32_in_) delete[] h_V__P32_in_;
+  if (h_S__y0_) delete[] h_S__y0_;
   if (h_spike_count) delete[] h_spike_count;
   if (h_currents_) delete[] h_currents_;
-if (h_ex_spikes_) delete[] h_ex_spikes_;
-if (h_in_spikes_) delete[] h_in_spikes_;
-if (h_currents__mark) delete[] h_currents__mark;
-if (h_ex_spikes__mark) delete[] h_ex_spikes__mark;
-if (h_in_spikes__mark) delete[] h_in_spikes__mark;
-if (h_currents__count) delete[] h_currents__count;
-if (h_ex_spikes__count) delete[] h_ex_spikes__count;
-if (h_in_spikes__count) delete[] h_in_spikes__count;
-if (h_currents__index) delete[] h_currents__index;
-if (h_ex_spikes__index) delete[] h_ex_spikes__index;
-if (h_in_spikes__index) delete[] h_in_spikes__index;
+  if (h_ex_spikes_) delete[] h_ex_spikes_;
+  if (h_in_spikes_) delete[] h_in_spikes_;
+  if (h_currents__mark) delete[] h_currents__mark;
+  if (h_ex_spikes__mark) delete[] h_ex_spikes__mark;
+  if (h_in_spikes__mark) delete[] h_in_spikes__mark;
+  if (h_currents__count) delete[] h_currents__count;
+  if (h_ex_spikes__count) delete[] h_ex_spikes__count;
+  if (h_in_spikes__count) delete[] h_in_spikes__count;
+  if (h_currents__index) delete[] h_currents__index;
+  if (h_ex_spikes__index) delete[] h_ex_spikes__index;
+  if (h_in_spikes__index) delete[] h_in_spikes__index;
 }
 
 void
@@ -203,7 +205,7 @@ nest::iaf_psc_alpha_gpu::mass_update_( const std::vector<Node *> &nodes,
     synchronize();
     //this->command_queue.flush();
 
-    PROFILING_END("HtD");
+    PROFILING_END("Zero Spike");
 
     PROFILING_START();
     execute_kernel(this->gpu_kernel, &gpu_context, this->num_local_nodes);
@@ -225,6 +227,7 @@ nest::iaf_psc_alpha_gpu::mass_update_( const std::vector<Node *> &nodes,
 
     PROFILING_START();
 
+    //int count_spike = 0;
     int node_id = 0;
     for ( std::vector<Node*>::const_iterator nodeIt = nodes.begin(); nodeIt != nodes.end(); nodeIt++, node_id++ )
     {
@@ -236,14 +239,18 @@ nest::iaf_psc_alpha_gpu::mass_update_( const std::vector<Node *> &nodes,
       nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
       //node->post_gsl(origin, lag);
 
+      //if (h_spike_count[node_id] > 0)
       for (size_t i = 0; i < h_spike_count[node_id]; i++)
       {
         node->set_spiketime( Time::step( origin.get_steps() + lag + 1 ) );
         SpikeEvent se;
         kernel().event_delivery_manager.send( *node, se, lag );
         //count_spike++;
+
+        //kernel().simulation_manager.incSpikes();
       }
     }
+    //cout << lag << ") SpikeCount " << count_spike << endl;
     PROFILING_END("Spike send");
   }
 
@@ -270,6 +277,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
   int thrd_id = kernel().vp_manager.get_thread_id();
   printf("[%d] Initialize OpenCL Context\n", thrd_id);
 
+  const int n_gpus = kernel().vp_manager.get_num_gpus();
   try
     {
       // Get list of OpenCL platforms.
@@ -281,9 +289,17 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
         return 1;
       }
 
-      gpu_context.platform = list_platform[0];
-      
+      gpu_context.platform = list_platform[1];
+      //if (list_platform.size() == 1) {
+      //  gpu_context.platform = list_platform[0];
+      //} else {
+      //  gpu_context.platform = list_platform[1];
+      //}
+
+      //std::cout << "Select Platform: " << gpu_context.platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+
       gpu_context.platform.getDevices(CL_DEVICE_TYPE_GPU, &gpu_context.list_device);
+      //gpu_context.platform.getDevices(CL_DEVICE_TYPE_CPU, &gpu_context.list_device);
 
       context = cl::Context(gpu_context.list_device);
 
@@ -293,7 +309,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
       FILE *fs = fopen(src_file.c_str(), "r");
       if (!fs)
       {
-        printf("Failed to load kernel file.\n");
+        std::cerr << "Failed to load kernel file." << std::endl;
         return 1;
       }
 
@@ -307,6 +323,8 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
 
       try {
         program.build(gpu_context.list_device, "-cl-nv-maxrregcount=200 -cl-nv-verbose");
+        //program.build(gpu_context.list_device, "-cl-fast-relaxed-math");
+        //program.build(gpu_context.list_device);
       } catch (const cl::Error&) {
         std::cerr
           << "OpenCL compilation error" << std::endl
@@ -316,7 +334,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
       }
 
       const int n_devices = gpu_context.list_device.size();
-      const int n_gpus = kernel().vp_manager.get_num_gpus();
+      
       if (n_devices < n_gpus) {
         kernel().vp_manager.set_num_gpus(n_devices);
         std::cout << "Set num of GPUS=" << n_devices << " (" << n_gpus << ")" << std::endl;
@@ -593,12 +611,15 @@ FINISH_1D_UPLOAD(S__y0_, h_S__y0_, double);
 #define DOWNLOAD_1D_DATA(dst, buf)        \
   node->dst = buf[i];                            
 
+//int gpuNodeCount0 = 0;
+//extern void writeNodes(nest::thread t, int count, double* nodes, size_t num_nodes);
+
 void
 nest::iaf_psc_alpha_gpu::copy_data_from_device(const std::vector< Node* > &nodes, bool last_copy)
 {
   int num_nodes = nodes.size();
 
-  std::vector<Node *>::const_iterator nodeIt = nodes.begin();
+  //std::vector<Node *>::const_iterator nodeIt = nodes.begin();
 
   // if (last_copy)
   //   {
@@ -608,6 +629,10 @@ nest::iaf_psc_alpha_gpu::copy_data_from_device(const std::vector< Node* > &nodes
     
   START_1D_DOWNLOAD(d_spike_count, h_spike_count, unsigned int);
   
+  //START_1D_DOWNLOAD(S__y3_, h_S__y3_, double);
+  //int thrd_id = kernel().vp_manager.get_thread_id();
+  //writeNodes(thrd_id, gpuNodeCount0++, h_S__y3_, this->num_local_nodes);
+
   // for (int i = 0; nodeIt != nodes.end(); nodeIt++, i++)
   //   {
   //     nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
@@ -643,16 +668,16 @@ nest::iaf_psc_alpha_gpu::upload(clContext_ *clCxt, void *data, cl::Buffer &gdata
   if (datalen == 0)
     return;
 
-  try {
+  //try {
     cl_int ret = this->command_queue.enqueueWriteBuffer(gdata, CL_FALSE, 0, datalen, (void *)data, NULL, NULL);
     if(ret != CL_SUCCESS){
       std::cerr << "OpenCL clEnqueueWriteBuffer failed." << ret << std::endl;
       return ;
     }
-  } catch (cl::Error err) {
-    std::cerr << "OpenCL enqueueWriteBuffer " << err.what() << "(" << err.err() << ")" << std::endl;
-    return;
-   }
+  //} catch (cl::Error err) {
+  //  std::cerr << "OpenCL enqueueWriteBuffer " << err.what() << "(" << err.err() << ") " << varname << " len=" << datalen << std::endl;
+  //  return;
+  // }
 }
 
 void
@@ -968,12 +993,12 @@ nest::iaf_psc_alpha_gpu::initialize()
   for (vector<vector<connection_info> >::iterator src_it = connections.begin();
        src_it != connections.end();
        src_it++, node_id++)
-    {
-      h_connections_ptr[node_id] = i;
+  {
+    h_connections_ptr[node_id] = i;
 
-      for (vector<connection_info>::iterator tgt_it = (*src_it).begin();
-       tgt_it != (*src_it).end();
-       tgt_it++, i++)
+    for (vector<connection_info>::iterator tgt_it = (*src_it).begin();
+      tgt_it != (*src_it).end();
+      tgt_it++, i++)
     {
       connection_info& info = *tgt_it;
       h_connections[i] = info.tgt_id;
@@ -981,7 +1006,7 @@ nest::iaf_psc_alpha_gpu::initialize()
       // if (node_id == 68)
       //   cout << node_id << " " << info.tgt_id << " " << info.weight << endl;
     }
-    }
+  }
 
   for (size_t i = connections.size(); i <= this->total_num_nodes; i++)
     h_connections_ptr[i] = graph_size;
@@ -1024,8 +1049,17 @@ nest::iaf_psc_alpha_gpu::deliver_events()
   //cout << "batch_size " << batch_size << endl;
   // getchar();
 
+  //int thrd_id = kernel().vp_manager.get_thread_id();
+  //#pragma omp critical
+  //printf("[%d] Deliver Events - Batch Size: %d\n", thrd_id, batch_size);
   if (batch_size != 0)
   {
+#ifdef PROFILING_SIZE
+    #pragma omp critical
+    printf("{P} Normal Batch: %d\n", batch_size);
+#endif
+    //cout << "Normal Batch: " << batch_size << endl;
+
     h_spike_tgid = new int[batch_size];
     // h_t_spike = new double[batch_size];
     // h_dendritic_delay = new double[batch_size];
@@ -1062,6 +1096,8 @@ nest::iaf_psc_alpha_gpu::deliver_events()
     int ind = 0;
     for (vector< synapse_info >::iterator it = list_spikes.begin(); it != list_spikes.end(); it++, ind++)
     {
+      assert(ind < batch_size);
+
       synapse_info& entry = *it;
       h_spike_tgid[ind] = entry.target_node;
       // h_t_spike[ind] = entry.t_spike;
@@ -1078,17 +1114,23 @@ nest::iaf_psc_alpha_gpu::deliver_events()
       if (entry.type == 2)
       {
         type_count++;
-        h_Kplus_[ind] = entry.Kplus;      
+        h_Kplus_[ind] = entry.Kplus;
         h_t_lastspike[ind] = entry.last_t_spike;
       }
     }
 
-    //cout << "3" << endl;
-    upload(&gpu_context, (void*)h_spike_tgid, d_spike_tgid, batch_size*sizeof(int));
-    // upload(&gpu_context, (void*)h_t_spike, d_t_spike, batch_size*sizeof(double));
-    // upload(&gpu_context, (void*)h_dendritic_delay, d_dendritic_delay, batch_size*sizeof(double));
-    upload(&gpu_context, (void*)h_weight_, d_weight_, batch_size*sizeof(double));
-    upload(&gpu_context, (void*)h_pos, d_pos, batch_size*sizeof(long));
+    try {
+      //cout << "Batch Size: " << batch_size << endl;
+      //cout << "3" << endl;
+      upload(&gpu_context, (void*)h_spike_tgid, d_spike_tgid, batch_size*sizeof(int));
+      // upload(&gpu_context, (void*)h_t_spike, d_t_spike, batch_size*sizeof(double));
+      // upload(&gpu_context, (void*)h_dendritic_delay, d_dendritic_delay, batch_size*sizeof(double));
+      upload(&gpu_context, (void*)h_weight_, d_weight_, batch_size*sizeof(double));
+      upload(&gpu_context, (void*)h_pos, d_pos, batch_size*sizeof(long));
+    } catch (cl::Error err) {
+      std::cerr << "OpenCL enqueueWriteBuffer " << err.what() << "(" << err.err() << ") BatchSize: " << batch_size << std::endl;
+      throw err;
+    }
 
     if (this->update_type == 2)
     {
@@ -1116,6 +1158,10 @@ nest::iaf_psc_alpha_gpu::deliver_events()
     synchronize();
 
     //cout << "5" << endl;
+    //cout << "conn_type " << conn_type << " type_count " << type_count << endl;
+    //int connection0 = 0;
+    //int connection1 = 0;
+    //int connection2 = 0;
     if (type_count > 0)
     {
       download(&gpu_context, d_weight_, (void*)h_weight_, batch_size * sizeof(double));
@@ -1125,21 +1171,30 @@ nest::iaf_psc_alpha_gpu::deliver_events()
       ind = 0;
       for (vector< synapse_info >::iterator it = list_spikes.begin(); it != list_spikes.end(); it++, ind++)
       {
+        assert(ind < batch_size);
+
         synapse_info& entry = *it;
         if (entry.type == 1)
         {
           // STDPConnection< TargetIdentifierIndex > *connection = entry.connection;
           // connection->weight_ = h_weight_[ind];
           // connection->Kplus_ = h_Kplus_[ind];
+          //connection1 += 1;
         }
         else if (entry.type == 2)
         {
           STDPPLConnectionHom< TargetIdentifierIndex > *connection = entry.connection;
           connection->weight_ = h_weight_[ind];
           connection->Kplus_ = h_Kplus_[ind];
+
+          //cout << "[" << ind << "] W" << h_weight_[ind] << endl;
+          //connection2 +=1;
+        } else {
+          //connection0 += 1;
         }
       }
     }
+    //cout << "Updated Connection " << connection0 << " " << connection1 << " " << connection2 << endl;
 
     //cout << "6" << endl;
     delete[] h_spike_tgid;
@@ -1167,8 +1222,17 @@ nest::iaf_psc_alpha_gpu::deliver_static_events()
   // cout << "static_batch_size " << static_batch_size << endl;
   // getchar();
   
+  //int thrd_id = kernel().vp_manager.get_thread_id();
+  //#pragma omp critical
+  //printf("[%d] Static Batch: %d\n", thrd_id, static_batch_size);
   if (static_batch_size != 0)
   {
+#ifdef PROFILING_SIZE
+    #pragma omp critical
+    printf("{P} Static Batch: %d\n", static_batch_size);
+#endif
+    //cout << "Static Batch: " << static_batch_size << endl;
+
     h_spike_src = new int[static_batch_size];
     h_spike_multiplicity = new int[static_batch_size];
     h_spike_pos = new long[static_batch_size];

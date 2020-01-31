@@ -16,8 +16,8 @@ namespace nest
       {};
     virtual ~model_gpu() {};
 
-    int total_num_nodes;
-    int num_local_nodes;
+    size_t total_num_nodes;
+    size_t num_local_nodes;
     
     bool init_device;
     int update_type;
@@ -46,6 +46,10 @@ namespace nest
     virtual void insert_static_event(SpikeEvent &e) = 0;
     
     virtual void advance_time() = 0;
+
+    inline virtual bool isLocalNode(index i) const {
+      return i < this->num_local_nodes;
+    };
   };
 }
 

@@ -14,5 +14,7 @@ void nest::iaf_psc_alpha::handle(BuildGraphEvent &e)
     //   std::cout << sgid << " " << tgid << " " << weight << std::endl;
     //   getchar();
     // }
+
+  assert(kernel().simulation_manager.isGPU(thrd));
   kernel().simulation_manager.gpu_execution[thrd]->handle(sgid, tgid, weight);
 }
