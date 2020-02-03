@@ -35,8 +35,14 @@ namespace nest
     ~iaf_psc_alpha_gpu();
 
     void initialize_gpu();
-    bool mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to );
-    void mass_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to );
+    void initialize_nodes(const std::vector< Node* > &nodes);
+
+    bool mass_wfr_update(Time const& origin, const long from, const long to );
+    void mass_update(Time const& origin, const long from, const long to );
+
+    bool mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ) { return mass_wfr_update(origin, from, to); }
+    void mass_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ){ mass_update(origin, from, to); }
+
     void clear_buffer();
     void initialize();
     void fill_event_buffer(SecondaryEvent& e);
@@ -48,8 +54,11 @@ namespace nest
 
     void handle(index sgid, index tgid);
 
-    void pre_deliver_event(const std::vector< Node* > &nodes);
-    void post_deliver_event(const std::vector< Node* > &nodes);
+    void pre_deliver_event();
+    void post_deliver_event();
+
+    void pre_deliver_event(const std::vector< Node* > &nodes) { pre_deliver_event(); }
+    void post_deliver_event(const std::vector< Node* > &nodes) { post_deliver_event(); }
 
     void handle(Event &e, double last_t_spike, const CommonSynapseProperties *cp, void *conn, int type);
     void handle(index sgid, index tgid, double weight);
@@ -77,6 +86,8 @@ namespace nest
     cl::Kernel *deliver_kernel;
     cl::Kernel *static_deliver_kernel;
 
+    /*****************************************************/
+    // Connections
     typedef struct connection_info {
       int tgt_id;
       double weight;
@@ -86,106 +97,113 @@ namespace nest
     vector< SpikeEvent > list_sgid;
     
     size_t graph_size;
-    int *h_connections_ptr;
-    int *h_connections;
-    double *h_connections_weight;
+    //int *h_connections_ptr;
+    //int *h_connections;
+    //double *h_connections_weight;
     cl::Buffer d_connections_ptr;
     cl::Buffer d_connections;
     cl::Buffer d_connections_weight;
+    /*****************************************************/
  
     size_t event_size;
     size_t ring_buffer_size;
     double* h_currents_;
-double* h_ex_spikes_;
-double* h_in_spikes_;
-int* h_currents__mark;
-int* h_ex_spikes__mark;
-int* h_in_spikes__mark;
-int* h_currents__count;
-int* h_ex_spikes__count;
-int* h_in_spikes__count;
-int* h_currents__index;
-int* h_ex_spikes__index;
-int* h_in_spikes__index;
+    double* h_ex_spikes_;
+    double* h_in_spikes_;
 
-    cl::Buffer d_currents__buf;
-cl::Buffer d_ex_spikes__buf;
-cl::Buffer d_in_spikes__buf;
-cl::Buffer d_currents_;
-cl::Buffer d_ex_spikes_;
-cl::Buffer d_in_spikes_;
-cl::Buffer d_currents__count;
-cl::Buffer d_ex_spikes__count;
-cl::Buffer d_in_spikes__count;
-cl::Buffer d_currents__index;
-cl::Buffer d_ex_spikes__index;
-cl::Buffer d_in_spikes__index;
+  // int* h_currents__mark;
+  // int* h_ex_spikes__mark;
+  // int* h_in_spikes__mark;
+  // int* h_currents__count;
+  // int* h_ex_spikes__count;
+  // int* h_in_spikes__count;
+  // int* h_currents__index;
+  // int* h_ex_spikes__index;
+  // int* h_in_spikes__index;
+
+    // cl::Buffer d_currents__buf;
+    // cl::Buffer d_ex_spikes__buf;
+    // cl::Buffer d_in_spikes__buf;
+    cl::Buffer d_currents_;
+    cl::Buffer d_ex_spikes_;
+    cl::Buffer d_in_spikes_;
+    // cl::Buffer d_currents__count;
+    // cl::Buffer d_ex_spikes__count;
+    // cl::Buffer d_in_spikes__count;
+    // cl::Buffer d_currents__index;
+    // cl::Buffer d_ex_spikes__index;
+    // cl::Buffer d_in_spikes__index;
 
     bool is_initialized;
     bool is_gpu_initialized;
     bool is_ring_buffer_ready;
+    bool is_history_initialized;
   
-cl::Buffer S__y3_;
-cl::Buffer P__Theta_;
-cl::Buffer V__P22_ex_;
-cl::Buffer V__P21_in_;
-cl::Buffer S__dI_ex_;
-cl::Buffer P__I_e_;
-cl::Buffer V__IPSCInitialValue_;
-cl::Buffer V__P31_ex_;
-cl::Buffer S__I_in_;
-cl::Buffer V__expm1_tau_m_;
-cl::Buffer S__r_;
-cl::Buffer S__I_ex_;
-cl::Buffer V__P21_ex_;
-cl::Buffer P__LowerBound_;
-cl::Buffer V__P22_in_;
-cl::Buffer V__weighted_spikes_ex_;
-cl::Buffer V__P11_in_;
-cl::Buffer V__weighted_spikes_in_;
-cl::Buffer V__P31_in_;
-cl::Buffer V__EPSCInitialValue_;
-cl::Buffer V__P32_ex_;
-cl::Buffer V__P11_ex_;
-cl::Buffer S__dI_in_;
-cl::Buffer P__V_reset_;
-cl::Buffer V__RefractoryCounts_;
-cl::Buffer V__P30_;
-cl::Buffer V__P32_in_;
-cl::Buffer S__y0_;
+    /*****************************************************/
+    // Node
+    cl::Buffer S__y3_;
+    cl::Buffer P__Theta_;
+    cl::Buffer V__P22_ex_;
+    cl::Buffer V__P21_in_;
+    cl::Buffer S__dI_ex_;
+    cl::Buffer P__I_e_;
+    cl::Buffer V__IPSCInitialValue_;
+    cl::Buffer V__P31_ex_;
+    cl::Buffer S__I_in_;
+    cl::Buffer V__expm1_tau_m_;
+    cl::Buffer S__r_;
+    cl::Buffer S__I_ex_;
+    cl::Buffer V__P21_ex_;
+    cl::Buffer P__LowerBound_;
+    cl::Buffer V__P22_in_;
+    cl::Buffer V__weighted_spikes_ex_;
+    cl::Buffer V__P11_in_;
+    cl::Buffer V__weighted_spikes_in_;
+    cl::Buffer V__P31_in_;
+    cl::Buffer V__EPSCInitialValue_;
+    cl::Buffer V__P32_ex_;
+    cl::Buffer V__P11_ex_;
+    cl::Buffer S__dI_in_;
+    cl::Buffer P__V_reset_;
+    cl::Buffer V__RefractoryCounts_;
+    cl::Buffer V__P30_;
+    cl::Buffer V__P32_in_;
+    cl::Buffer S__y0_;
 
     cl::Buffer d_spike_count;
 
-double* h_S__y3_;
-double* h_P__Theta_;
-double* h_V__P22_ex_;
-double* h_V__P21_in_;
-double* h_S__dI_ex_;
-double* h_P__I_e_;
-double* h_V__IPSCInitialValue_;
-double* h_V__P31_ex_;
-double* h_S__I_in_;
-double* h_V__expm1_tau_m_;
-int* h_S__r_;
-double* h_S__I_ex_;
-double* h_V__P21_ex_;
-double* h_P__LowerBound_;
-double* h_V__P22_in_;
-double* h_V__weighted_spikes_ex_;
-double* h_V__P11_in_;
-double* h_V__weighted_spikes_in_;
-double* h_V__P31_in_;
-double* h_V__EPSCInitialValue_;
-double* h_V__P32_ex_;
-double* h_V__P11_ex_;
-double* h_S__dI_in_;
-double* h_P__V_reset_;
-int* h_V__RefractoryCounts_;
-double* h_V__P30_;
-double* h_V__P32_in_;
-double* h_S__y0_;
-    
+    double* h_S__y3_;
+    double* h_P__Theta_;
+    double* h_V__P22_ex_;
+    double* h_V__P21_in_;
+    double* h_S__dI_ex_;
+    double* h_P__I_e_;
+    double* h_V__IPSCInitialValue_;
+    double* h_V__P31_ex_;
+    double* h_S__I_in_;
+    double* h_V__expm1_tau_m_;
+    int* h_S__r_;
+    double* h_S__I_ex_;
+    double* h_V__P21_ex_;
+    double* h_P__LowerBound_;
+    double* h_V__P22_in_;
+    double* h_V__weighted_spikes_ex_;
+    double* h_V__P11_in_;
+    double* h_V__weighted_spikes_in_;
+    double* h_V__P31_in_;
+    double* h_V__EPSCInitialValue_;
+    double* h_V__P32_ex_;
+    double* h_V__P11_ex_;
+    double* h_S__dI_in_;
+    double* h_P__V_reset_;
+    int* h_V__RefractoryCounts_;
+    double* h_V__P30_;
+    double* h_V__P32_in_;
+    double* h_S__y0_;
+      
     unsigned int* h_spike_count;
+    /*****************************************************/
+    // History
 
     int *h_history_ptr;
     double *h_history_Kminus_;
@@ -194,15 +212,15 @@ double* h_S__y0_;
     double *h_Kminus_;
     double *h_tau_minus_inv_;
 
-    int *h_spike_tgid;
-    double *h_t_spike;
-    double *h_dendritic_delay;
-    double *h_weight_;
-    double *h_Kplus_;
-    int *h_conn_type_;
-    double *h_t_lastspike;
-    long *h_pos;
-    int *h_multiplicity;
+    // int *h_spike_tgid;
+    // double *h_t_spike;
+    // double *h_dendritic_delay;
+    // double *h_weight_;
+    // double *h_Kplus_;
+    // int *h_conn_type_;
+    // double *h_t_lastspike;
+    // long *h_pos;
+    // int *h_multiplicity;
     
     double cp_lambda_;
     double cp_mu_;
@@ -217,8 +235,8 @@ double* h_S__y0_;
     cl::Buffer d_tau_minus_inv_;
 
     cl::Buffer d_spike_tgid;
-    cl::Buffer d_t_spike;
-    cl::Buffer d_dendritic_delay;
+    //cl::Buffer d_t_spike;
+    //cl::Buffer d_dendritic_delay;
     cl::Buffer d_weight_;
     cl::Buffer d_Kplus_;
     cl::Buffer d_conn_type_;
@@ -226,13 +244,14 @@ double* h_S__y0_;
     cl::Buffer d_pos;
     cl::Buffer d_multiplicity;
 
-    int *h_spike_src;
-    int *h_spike_multiplicity;
-    long *h_spike_pos;
+    // int *h_spike_src;
+    // int *h_spike_multiplicity;
+    // long *h_spike_pos;
 
     cl::Buffer d_spike_src;
     cl::Buffer d_spike_multiplicity;
     cl::Buffer d_spike_pos;
+    /*****************************************************/
     
     struct synapse_info
     {
@@ -256,13 +275,16 @@ double* h_S__y0_;
     
     vector< synapse_info > list_spikes;
 
+    vector< Node* > actualNodes;
+    vector< Node* > otherNodes;
+
     int time_index;
     /* typedef std::vector< histentry > hist_queue; */
     /* hist_queue nodes_history; */
 
     size_t history_size;
 
-    bool mass_update_( const std::vector< Node* > &nodes,
+    bool mass_update_(
 		       Time const& origin,
 		       const long from,
 		       const long to,

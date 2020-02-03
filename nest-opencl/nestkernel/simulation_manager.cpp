@@ -39,7 +39,7 @@
 #include "dictutils.h"
 #include "psignal.h"
 
-//#define GPU
+#define GPU
 
 #ifdef GPU
   #include "../models/iaf_psc_alpha_gpu.h"
@@ -936,12 +936,13 @@ nest::SimulationManager::update_()
         gpu_exc->update_type = 2;
         //if (gpu_exc->updated_nodes.empty())
 
-        PROFILING_START();
-        update_nodes_gpu(gpu_exc, thread_local_nodes);
-        PROFILING_END_T("Gpu Update Nodes");
+        //PROFILING_START();
+        //update_nodes_gpu(gpu_exc, thread_local_nodes);
+        //PROFILING_END_T("Gpu Update Nodes");
 
         PROFILING_START();
-        gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
+        //gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
+        gpu_exc->mass_update(clock_, from_step_, to_step_ );
         PROFILING_END_T("Mass Update Nodes");
 
         PROFILING_START();

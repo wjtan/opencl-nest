@@ -4,53 +4,85 @@
 
 #define OPENCL_DBL_MEMCPY(dest, src, n, tid, nthreads)		\
     for (int i = 0; i < n; i++)					\
-      {								\
-	int idx = nthreads * i + tid;				\
-	dest[idx] = src[idx];					\
-      }
+    {								\
+      int idx = nthreads * i + tid;				\
+      dest[idx] = src[idx];					\
+    }
 
 #define GSL_MAX_DBL(a,b) ((a) > (b) ? (a) : (b))
 
 #pragma OPENCL EXTENSION cl_khr_fp64: enable
-#pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
-void AtomicAdd(__global double *val, double delta) {
-  union {
-    double f;
-    ulong  i;
-  } old;
-  union {
-    double f;
-    ulong  i;
-  } new;
-  do {
-    old.f = *val;
-    new.f = old.f + delta;
-  } while (atom_cmpxchg ( (volatile __global ulong *)val, old.i, new.i) != old.i);
-}
 
-double ring_buffer_get_value(__global double *ring_buffer, int ring_buffer_size, int num_nodes, int tid, long lag, int time_index)
+#ifdef cl_khr_int64_base_atomics
+  #pragma OPENCL EXTENSION cl_khr_int64_base_atomics: enable
+
+  typedef union {
+      ulong i;
+      double f;
+  } uni;
+
+  inline void AtomicAdd(__global double *val, double delta) {
+    uni oldV, newV;
+    do {
+      oldV.f = *val;
+      newV.f = oldV.f + delta;
+    } while (atom_cmpxchg ( (volatile __global ulong *)val, oldV.i, newV.i) != oldV.i);
+  }
+#else
+  typedef union {
+      uint i[2];
+      double f;
+  } uni;
+
+  inline void AtomicAdd(__global double *val, double delta) {
+    uni oldV, newV;
+    do {
+      oldV.f = *val;
+      newV.f = oldV.f + delta;
+    } while (
+      atomic_cmpxchg ( (volatile __global uint *)val+1, oldV.i[1], newV.i[1]) != oldV.i[1] &&
+      atomic_cmpxchg ( (volatile __global uint *)val, oldV.i[0], newV.i[0]) != oldV.i[0]
+    );
+  }
+
+  // typedef union {
+  //     uint i;
+  //     float f;
+  // } uni;
+
+  // inline void AtomicAdd(__global float *val, float delta) {
+  //   uni oldV, newV;
+  //   do {
+  //     oldV.f = *val;
+  //     newV.f = oldV.f + delta;
+  //   } while (atom_cmpxchg ( (volatile __global uint *)val, oldV.i, newV.i) != oldV.i);
+  // }
+#endif
+
+double ring_buffer_get_value(__global double *ring_buffer, int event_size, int num_nodes, int tid, long lag, int time_index)
 {
-  int ind = num_nodes * ((time_index + lag) % ring_buffer_size) + tid;
+  int ind = num_nodes * ((time_index + lag) % event_size) + tid;
   double val = ring_buffer[ind];
   ring_buffer[ind] = 0.0;
   return val;
 }
 
-void ring_buffer_add_value(__global double *ring_buffer, int ring_buffer_size, int num_nodes, int tgtid, long pos, double val, int time_index)
-{
-  int ind = num_nodes * ((time_index + pos) % ring_buffer_size) + tgtid;
-  ring_buffer[ind] += val;
-}
+//void ring_buffer_add_value(__global double *ring_buffer, int ring_buffer_size, int num_nodes, int tgtid, long pos, double val, int time_index)
+//{
+//  int ind = num_nodes * ((time_index + pos) % ring_buffer_size) + tgtid;
+//  ring_buffer[ind] += val;
+//}
 
-void ring_buffer_atomic_add_value(__global double *ring_buffer, int ring_buffer_size, int num_nodes, int tgtid, long pos, double val, int time_index)
+void ring_buffer_atomic_add_value(__global double *ring_buffer, int event_size, int num_nodes, int tgtid, long pos, double val, int time_index)
 {
-  int ind = num_nodes * ((time_index + pos) % ring_buffer_size) + tgtid;
+  int ind = num_nodes * ((time_index + pos) % event_size) + tgtid;
+  //ring_buffer[ind] += val;
   AtomicAdd(ring_buffer + ind, val);
 }
 
 __kernel void update(int num_nodes,
 		  long lag,
-		  int ring_buffer_size,
+		  int event_size,
 		  ////
 __global double *S__y3_,
 __global double *P__Theta_,
@@ -90,7 +122,7 @@ __global double *in_spikes_,
     unsigned int tid = get_global_id(0);
 
     if (tid >= num_nodes)
-	return;
+      return;
 
   {
     if ( S__r_[tid] == 0 )
@@ -115,7 +147,7 @@ __global double *in_spikes_,
 
     // Apply spikes delivered in this step; spikes arriving at T+1 have
     // an immediate effect on the state of the neuron
-    V__weighted_spikes_ex_[tid] = ring_buffer_get_value(ex_spikes_, ring_buffer_size, num_nodes, tid, lag, time_index);
+    V__weighted_spikes_ex_[tid] = ring_buffer_get_value(ex_spikes_, event_size, num_nodes, tid, lag, time_index);
     S__dI_ex_[tid] += V__EPSCInitialValue_[tid] * V__weighted_spikes_ex_[tid];
 
     // alpha shape EPSCs
@@ -124,8 +156,10 @@ __global double *in_spikes_,
 
     // Apply spikes delivered in this step; spikes arriving at T+1 have
     // an immediate effect on the state of the neuron
-    V__weighted_spikes_in_[tid] = ring_buffer_get_value(in_spikes_, ring_buffer_size, num_nodes, tid, lag, time_index);
+    V__weighted_spikes_in_[tid] = ring_buffer_get_value(in_spikes_, event_size, num_nodes, tid, lag, time_index);
     S__dI_in_[tid] += V__IPSCInitialValue_[tid] * V__weighted_spikes_in_[tid];
+
+    //spike_count[tid] = 0;
 
     // threshold crossing
     if ( S__y3_[tid] >= P__Theta_[tid] )
@@ -146,7 +180,7 @@ __global double *in_spikes_,
     }
 
     // set new input current
-    S__y0_[tid] = ring_buffer_get_value(currents_, ring_buffer_size, num_nodes, tid, lag, time_index);
+    S__y0_[tid] = ring_buffer_get_value(currents_, event_size, num_nodes, tid, lag, time_index);
 
     // log state data
     /*LOG DATA*/
@@ -155,24 +189,24 @@ __global double *in_spikes_,
 }
 
 void insert_into_ring_buffer(int num_nodes,
-			     int ring_buffer_size,
-			     int tgtid,
-			     long pos,
-			     double weight,
-			     int multiplicity,
-			     __global double *ex_spikes_,
-			     __global double *in_spikes_,
-			     int time_index)
+                             int event_size,
+                             int tgtid,
+                             long pos,
+                             double weight,
+                             int multiplicity,
+                             __global double *ex_spikes_,
+                             __global double *in_spikes_,
+                             int time_index)
 {
   const double s = weight * multiplicity;
 
   if ( weight > 0.0 )
     {
-      ring_buffer_atomic_add_value(ex_spikes_, ring_buffer_size, num_nodes, tgtid, pos, s, time_index);
+      ring_buffer_atomic_add_value(ex_spikes_, event_size, num_nodes, tgtid, pos, s, time_index);
     }
   else
     {
-      ring_buffer_atomic_add_value(in_spikes_, ring_buffer_size, num_nodes, tgtid, pos, s, time_index);
+      ring_buffer_atomic_add_value(in_spikes_, event_size, num_nodes, tgtid, pos, s, time_index);
     }
 
 }
@@ -191,37 +225,36 @@ __kernel void deliver_events(int num_nodes,
 			     int time_index)
 {
   unsigned int tid = get_global_id(0);
-  int warp_size = 32;
-  unsigned int wid = tid / warp_size;
-  unsigned int lane = tid & (warp_size - 1);
+  unsigned int wid = tid / WARP_SIZE;
+  unsigned int lane = tid & (WARP_SIZE - 1);
   unsigned int total_threads = get_global_size(0);
-  unsigned int total_warps = total_threads / warp_size;
+  unsigned int total_warps = total_threads / WARP_SIZE;
 
   for (int src = wid; src < num_spikes; src += total_warps)
-    {
-      int src_id = spike_src[src];
-      int multiplicity = spike_multiplicity[src];
-      long pos = spike_pos[src];
-      	
-      int tgt_start = connections_ptr[src_id];
-      int tgt_end = connections_ptr[src_id + 1];
+  {
+    int src_id = spike_src[src];
+    int multiplicity = spike_multiplicity[src];
+    long pos = spike_pos[src];
+    
+    int tgt_start = connections_ptr[src_id];
+    int tgt_end = connections_ptr[src_id + 1];
       
-      for (int i = tgt_start + lane; i < tgt_end; i += warp_size)
-	{
-	  int tgt_id = connections[i];
-	  double weight = connections_weight[i];
-	  
-	  insert_into_ring_buffer(num_nodes,
-				  event_size,
-				  tgt_id,
-				  pos,
-				  weight,
-				  multiplicity,
-				  ex_spikes_,
-				  in_spikes_,
-				  time_index);
-	}
+    for (int i = tgt_start + lane; i < tgt_end; i += WARP_SIZE)
+    {
+      int tgt_id = connections[i];
+      double weight = connections_weight[i];
+      
+      insert_into_ring_buffer(num_nodes,
+            event_size,
+            tgt_id,
+            pos,
+            weight,
+            multiplicity,
+            ex_spikes_,
+            in_spikes_,
+            time_index);
     }
+  }
 }
 
 void get_history(double t1, double t2, int history_size, __global double *history_t_,
@@ -230,25 +263,25 @@ void get_history(double t1, double t2, int history_size, __global double *histor
   *finish = history_size;
 
   if (history_size == 0)
-    {
-      *start = *finish;
-      return;
-    }
+  {
+    *start = *finish;
+    return;
+  }
   else
+  {
+    int runner = 0;
+    while ((runner != history_size) && (history_t_[runner] <= t1))
     {
-      int runner = 0;
-      while ((runner != history_size) && (history_t_[runner] <= t1))
-	{
-	  ++runner;
-	}
-      *start = runner;
-      while ((runner != history_size) && (history_t_[runner] <= t2))
-	{
-	  history_access_counter_[runner]++;
-	  ++runner;
-	}
-      *finish = runner;
+      ++runner;
     }
+    *start = runner;
+    while ((runner != history_size) && (history_t_[runner] <= t2))
+    {
+      history_access_counter_[runner]++;
+      ++runner;
+    }
+    *finish = runner;
+  }
 }
 
 double facilitate_(double w, double kplus, double lambda_, double mu_plus_, double Wmax_)
@@ -283,25 +316,25 @@ double get_K_value(double t, int history_size,
 		   double tau_minus_inv_)
 {
   if (history_size == 0)
-    {
-      return K_minus_;
-    }
+  {
+    return K_minus_;
+  }
   int i = history_size - 1;
   while (i >= 0)
+  {
+    if (t > history_t_[i])
     {
-      if (t > history_t_[i])
-	{
-	  return (history_Kminus_[i] *
-		  exp((history_t_[i] - t) * tau_minus_inv_));
-	}
-      i--;
+      return (history_Kminus_[i] *
+        exp((history_t_[i] - t) * tau_minus_inv_));
     }
+    i--;
+  }
   return 0;
 }
 
 
 void send_stdp(int num_nodes,
-	       int ring_buffer_size,
+	       int event_size,
 	       int tgtid,
 	       double t_spike,
 	       double dendritic_delay,
@@ -326,57 +359,57 @@ void send_stdp(int num_nodes,
 	       int time_index)
 {
   if (conn_type_ == 2)
+  {
+    int start, finish;
+    get_history(t_lastspike - dendritic_delay, t_spike - dendritic_delay, history_size,
+    history_t_, history_access_counter_, &start, &finish);
+
+    double minus_dt;
+    while (start != finish)
     {
-      int start, finish;
-      get_history(t_lastspike - dendritic_delay, t_spike - dendritic_delay, history_size,
-		  history_t_, history_access_counter_, &start, &finish);
-
-      double minus_dt;
-      while (start != finish)
-	{
-	  minus_dt = t_lastspike - (history_t_[start] + dendritic_delay);
-	  start++;
-	  if (minus_dt == 0)
-	    {
-	      continue;
-	    }
-	  *weight_ = facilitate_pl_(*weight_, *Kplus_ * exp(minus_dt * cp_tau_plus_inv), cp_lambda, cp_mu);
-	}
-
-      double kminus = get_K_value(t_spike - dendritic_delay, history_size,
-				  K_minus_,
-				  history_Kminus_,
-				  history_t_,
-				  tau_minus_inv_);
-      *weight_ = depress_pl_( *weight_, kminus, cp_lambda, cp_alpha );
-
-      insert_into_ring_buffer(num_nodes,
-			      ring_buffer_size,
-			      tgtid,
-			      pos,
-			      *weight_,
-			      multiplicity,
-			      ex_spikes_,
-			      in_spikes_,
-			      time_index);
-      *Kplus_ = *Kplus_ * exp( ( t_lastspike - t_spike ) * cp_tau_plus_inv ) + 1.0;
+      minus_dt = t_lastspike - (history_t_[start] + dendritic_delay);
+      start++;
+      if (minus_dt == 0)
+      {
+        continue;
+      }
+      *weight_ = facilitate_pl_(*weight_, *Kplus_ * exp(minus_dt * cp_tau_plus_inv), cp_lambda, cp_mu);
     }
+
+    double kminus = get_K_value(t_spike - dendritic_delay, history_size,
+        K_minus_,
+        history_Kminus_,
+        history_t_,
+        tau_minus_inv_);
+    *weight_ = depress_pl_( *weight_, kminus, cp_lambda, cp_alpha );
+
+    insert_into_ring_buffer(num_nodes,
+          event_size,
+          tgtid,
+          pos,
+          *weight_,
+          multiplicity,
+          ex_spikes_,
+          in_spikes_,
+          time_index);
+    *Kplus_ = *Kplus_ * exp( ( t_lastspike - t_spike ) * cp_tau_plus_inv ) + 1.0;
+  }
   else if (conn_type_ == 1)
-    {
-      insert_into_ring_buffer(num_nodes,
-      			      ring_buffer_size,
-      			      tgtid,
-      			      pos,
-      			      *weight_,
-      			      multiplicity,
-      			      ex_spikes_,
-      			      in_spikes_,
-			      time_index);
-    }
+  {
+    insert_into_ring_buffer(num_nodes,
+                            event_size,
+                            tgtid,
+                            pos,
+                            *weight_,
+                            multiplicity,
+                            ex_spikes_,
+                            in_spikes_,
+                            time_index);
+  }
 }
 
 __kernel void deliver_events_stdp_pl(int num_nodes, int batch_size,
-				     int ring_buffer_size,
+				     int event_size,
 				     __global int *d_history_ptr,
 				     __global double *d_history_Kminus_,
 				     __global double *d_history_t_,
@@ -429,7 +462,7 @@ __kernel void deliver_events_stdp_pl(int num_nodes, int batch_size,
   double tau_minus_inv_ = d_tau_minus_inv_[tgid];
 
   send_stdp(num_nodes,
-	    ring_buffer_size,
+	    event_size,
 	    tgid,
 	    t_spike,
 	    dendritic_delay,
@@ -455,14 +488,14 @@ __kernel void deliver_events_stdp_pl(int num_nodes, int batch_size,
   //t_lastspike = t_spike;
 
   if (conn_type_ == 2)
-    {
-      d_weight_[synapse_id] = weight_;
-      d_Kplus_[synapse_id] = Kplus_;
-    }
+  {
+    d_weight_[synapse_id] = weight_;
+    d_Kplus_[synapse_id] = Kplus_;
+  }
 }
 
 /* __kernel void insert_event_to_rb(int num_nodes, int batch_size, */
-/* 				 int ring_buffer_size, */
+/* 				 int event_size, */
 /* 				 __global int *d_tgid, */
 /* 				 __global double *d_weight_, */
 /* 				 __global long *d_pos, */
@@ -482,11 +515,11 @@ __kernel void deliver_events_stdp_pl(int num_nodes, int batch_size,
 
 /*   /\* if (weight > 0.0) *\/ */
 /*   /\*   { *\/ */
-/*   /\*     ring_buffer_atomic_add_value(ex_spikes_, ring_buffer_size, num_nodes, tgid, pos, s); *\/ */
+/*   /\*     ring_buffer_atomic_add_value(ex_spikes_, event_size, num_nodes, tgid, pos, s); *\/ */
 /*   /\*   } *\/ */
 /*   /\* else *\/ */
 /*   /\*   { *\/ */
-/*   /\*     ring_buffer_atomic_add_value(in_spikes_, ring_buffer_size, num_nodes, tgid, pos, s); *\/ */
+/*   /\*     ring_buffer_atomic_add_value(in_spikes_, event_size, num_nodes, tgid, pos, s); *\/ */
 /*   /\*   } *\/ */
 
 /* } */

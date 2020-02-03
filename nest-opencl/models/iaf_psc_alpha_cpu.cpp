@@ -162,7 +162,7 @@ nest::iaf_psc_alpha_cpu::initialize_nodes(const std::vector< Node* > &nodes) {
       //cout << "[" << t << "] node("<< (*node)->get_thread() <<","<< (*node)->get_thread_lid() <<") " <<  (*node)->get_gid() << " " << (*node)->get_lid() << endl;
     } else {
       otherNodes.push_back(*node);
-      cout << "[" << t << "] other node("<< (*node)->get_thread() <<","<< (*node)->get_thread_lid() <<") " << (*node)->get_gid() << " " << (*node)->get_lid() << ": " << (*node)->get_model_id() << endl;
+      //cout << "[" << t << "] other node("<< (*node)->get_thread() <<","<< (*node)->get_thread_lid() <<") " << (*node)->get_gid() << " " << (*node)->get_lid() << ": " << (*node)->get_model_id() << endl;
     }
   }
   this->num_local_nodes = actualNodes.size();
