@@ -279,10 +279,10 @@ nest::iaf_psc_alpha_gpu::mass_update_(
   }
   PROFILING_END("Node Update");
 
-  PROFILING_START();
-  copy_data_from_device(actualNodes, true);
-  synchronize();
-  PROFILING_END("Last DtH");
+  // PROFILING_START();
+  // copy_data_from_device(actualNodes, true);
+  // synchronize();
+  // PROFILING_END("Last DtH");
 
   return true;
 }
@@ -305,12 +305,12 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
         return 1;
       }
 
-      gpu_context.platform = list_platform[1];
-      //if (list_platform.size() == 1) {
-      //  gpu_context.platform = list_platform[0];
-      //} else {
-      //  gpu_context.platform = list_platform[1];
-      //}
+      //gpu_context.platform = list_platform[1];
+      if (list_platform.size() == 1) {
+        gpu_context.platform = list_platform[0];
+      } else {
+        gpu_context.platform = list_platform[1];
+      }
 
       //std::cout << "Select Platform: " << gpu_context.platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
 
@@ -398,8 +398,7 @@ nest::iaf_psc_alpha_gpu::initialize_device()
       int thrd_id = kernel().vp_manager.get_thread_id();
       int len = this->num_local_nodes;
 
-      //setlocale(LC_NUMERIC, "");
-      printf("[%d] Num of nodes: %d\n", thrd_id, this->num_local_nodes);
+      printf("[%d] Num of nodes: %ld\n", thrd_id, this->num_local_nodes);
       //printf("[%d] Double: %'ld Int: %'ld\n", thrd_id, 26 * len * sizeof(double), 3 * len * sizeof(int));
       
       h_S__y3_ = new double[len];
@@ -1360,7 +1359,7 @@ void nest::iaf_psc_alpha_gpu::post_deliver_event()
   {
     nest::iaf_psc_alpha* node = dynamic_cast<nest::iaf_psc_alpha*>(*it);
     assert(node != nullptr);
-    
+
     hist_queue h_ = node->get_all_history();
     for (hist_queue::iterator h_it = h_.begin(); h_it != h_.end(); h_it++, hist_it++)
     {

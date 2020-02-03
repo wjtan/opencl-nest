@@ -45,6 +45,9 @@
 // Includes from sli:
 #include "dictutils.h"
 #include <stdio.h>
+
+//#define LOAD_BALANCE
+
 namespace nest
 {
 
@@ -258,6 +261,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
       }
     }
 
+#ifdef LOAD_BALANCE
     int total_threads = kernel().vp_manager.get_num_threads();
     int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
     int num_cpu_threads = total_threads - num_gpu_threads;
@@ -272,7 +276,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
     printf("1) num_gpu_nodes: %d\n", num_gpu_nodes);
     printf("1) num_cpu_nodes: %d\n", num_cpu_nodes);
     //printf("bucket: %d\n", bucket);
-    //getchar();
+#endif
 
     for ( size_t gid = min_gid; gid < max_gid; ++gid )
     {
@@ -282,6 +286,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
       if ( kernel().vp_manager.is_local_vp( vp ) )
       {
         int _thread = t;
+#ifdef LOAD_BALANCE
         int k = gid % bucket;
         if (k < num_gpu_nodes)
           _thread = gid % num_gpu_threads;
@@ -289,6 +294,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
           _thread = gid % num_cpu_threads + num_gpu_threads;
 
         //printf("gid: %d t: %d k: %d _thread: %d\n", gid, t, k, _thread);
+#endif
 
         Node* newnode = model->allocate( _thread );
         newnode->set_gid_( gid );
@@ -355,6 +361,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
     // become irrelevant.
     current_->add_gid_range( min_gid, max_gid - 1 );
 
+#ifdef LOAD_BALANCE
     int total_threads = kernel().vp_manager.get_num_threads();
     int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
     int num_cpu_threads = total_threads - num_gpu_threads;
@@ -369,7 +376,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
     printf("2) num_gpu_nodes: %d\n", num_gpu_nodes);
     printf("2) num_cpu_nodes: %d\n", num_cpu_nodes);
     //printf("bucket: %d\n", bucket);
-    //getchar();
+#endif
 
     // min_gid is first valid gid i should create, hence ask for the first local
     // gid after min_gid-1
@@ -381,6 +388,8 @@ index NodeManager::add_node( index mod, long n ) // no_p
       if ( kernel().vp_manager.is_local_vp( vp ) )
       {
         int _thread = t;
+
+#ifdef LOAD_BALANCE
         int k = gid % bucket;
         if (k < num_gpu_nodes)
             _thread = gid % num_gpu_threads;
@@ -388,6 +397,7 @@ index NodeManager::add_node( index mod, long n ) // no_p
             _thread = gid % num_cpu_threads + num_gpu_threads;
         
         //printf("gid: %d t: %d k: %d _thread: %d\n", gid, t, k, _thread);
+#endif
 
         Node* newnode = model->allocate( _thread );
         newnode->set_gid_( gid );
