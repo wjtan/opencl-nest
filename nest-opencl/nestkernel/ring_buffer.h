@@ -104,6 +104,8 @@ public:
    */
   double get_value( const long offs );
 
+  double read_value( const long offs );
+
   /**
    * Read one value from ring buffer without deleting it afterwards.
    * @param  offs  Offset of element to read within slice.
@@ -170,6 +172,18 @@ RingBuffer::get_value( const long offs )
   double val = buffer_[ idx ];
   buffer_[ idx ] = 0.0; // clear buffer after reading
   return val;
+}
+
+inline double
+RingBuffer::read_value( const long offs )
+{
+  assert( 0 <= offs && ( size_t ) offs < buffer_.size() );
+  assert( ( delay ) offs < kernel().connection_manager.get_min_delay() );
+
+  // offs == 0 is beginning of slice, but we have to
+  // take modulo into account when indexing
+  long idx = get_index_( offs );
+  return buffer_[ idx ];
 }
 
 inline double

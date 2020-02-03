@@ -293,7 +293,10 @@ double* h_S__y0_;
     //int initialize_command_queue();
     //void prepare_copy_to_device(std::vector< Node* > &nodes, bool called_from_wfr_update, long lag_);
     void copy_data_to_device(const std::vector< Node* > &nodes);
-    //void copy_data_from_device(const std::vector< Node* > &nodes, bool last_copy);
+    void copy_data_from_device(const std::vector< Node* > &nodes, bool last_copy);
+
+    void copy_spike_to_device(const long lag);
+    void copy_spike_from_device();
     //int check_data(std::vector< Node* > &nodes, int dimension);
     //void create(clContext_ *clCxt, cl::Buffer *mem, int len);
    // void upload(clContext_ *clCxt, void *data,cl::Buffer &gdata,int datalen);

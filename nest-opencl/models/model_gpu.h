@@ -10,14 +10,14 @@ namespace nest
 {
   class model_gpu
   {
-  public:
-    
-  model_gpu(): init_device(false)
-      {};
-    virtual ~model_gpu() {};
-
+  protected:
     size_t total_num_nodes;
     size_t num_local_nodes;
+
+  public:
+    
+    model_gpu(): init_device(false) {};
+    virtual ~model_gpu() {};
     
     bool init_device;
     int update_type;

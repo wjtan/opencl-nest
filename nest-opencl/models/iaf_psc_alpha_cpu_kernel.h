@@ -1,6 +1,8 @@
 #ifndef IAF_PSC_ALPHA_CPU_KERNEL_H
 #define IAF_PSC_ALPHA_CPU_KERNEL_H
 
+#include "../nestkernel/ring_buffer.h"
+
 #include <vector>
 using namespace std;
 
@@ -39,9 +41,17 @@ int *V__RefractoryCounts_,
 double *V__P30_,
 double *V__P32_in_,
 double *S__y0_,
+
+#ifdef USE_BUFFER
+    nest::RingBuffer &ex_spikes_,
+    nest::RingBuffer &in_spikes_,
+    nest::RingBuffer &currents_,
+#else
 vector< double > &currents_,
 vector< double > &ex_spikes_,
 vector< double > &in_spikes_,
+#endif
+
       ///
 unsigned int *spike_count,
 int time_index);

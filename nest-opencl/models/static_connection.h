@@ -160,20 +160,36 @@ public:
     e.set_delay( get_delay_steps() );
     Node *target = get_target( t );
 
-    if (kernel().simulation_manager.isGPU(t))
-    {
-      Event* e_ptr = &e;
-      model_gpu* gpu_exc = kernel().simulation_manager.gpu_execution[t];
-      //bool n = target->get_thread_lid() < gpu_exc->num_local_nodes - 2;
-      if (dynamic_cast<DSSpikeEvent*>(e_ptr) == NULL &&
-          gpu_exc->init_device &&
-          gpu_exc->isLocalNode(target->get_thread_lid()))
-        return;
-    }
+// #ifdef STATIC_DELIVER
+//     if (kernel().simulation_manager.isGPU(t))
+//     {
+//       Event* e_ptr = &e;
+//       model_gpu* gpu_exc = kernel().simulation_manager.gpu_execution[t];
+//       //bool n = target->get_thread_lid() < gpu_exc->num_local_nodes - 2;
+//       if (dynamic_cast<DSSpikeEvent*>(e_ptr) == nullptr && // If not DSSpikeEvent (i.e. normal Spike)
+//           gpu_exc->init_device &&
+//           gpu_exc->isLocalNode(target->get_thread_lid())) // If target is local node
+//         return;
+//     }
+// #endif
+
     e.set_weight( weight_ );
     
     e.set_receiver( *target );
     e.set_rport( get_rport() );
+
+    // if (kernel().simulation_manager.isGPU(t))
+    // {
+    //   model_gpu* gpu_exc = kernel().simulation_manager.gpu_execution[t];
+    //   if (!gpu_exc->init_device) return;
+
+    //   Event* e_ptr = &e;
+    //   SpikeEvent* e2 = dynamic_cast<SpikeEvent*>(e_ptr);
+
+    //   gpu_exc->insert_static_event(*e2);
+    //   return;
+    // }
+
     e();
   }
 

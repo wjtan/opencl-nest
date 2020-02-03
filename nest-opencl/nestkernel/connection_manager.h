@@ -80,20 +80,6 @@ public:
   virtual void set_status( const DictionaryDatum& );
   virtual void get_status( DictionaryDatum& );
 
-  //double connectionTimeC [6] = {0,0,0,0,0};
-  //double connectionTimeG [6] = {0,0,0,0,0};
-
-  //int sendBaseCount [6] = {0,0,0,0,0};
-  //int sendBaseCount2 [6] = {0,0,0,0,0};
-  //int sendCountC [6] = {0,0,0,0,0};
-  //int sendCountG [6] = {0,0,0,0,0};
-
-  //double sendTime [6] = {0,0,0,0,0};
-  //double sendAllTime [6] = {0,0,0,0,0};
-  //double weightTime [6] = {0,0,0,0,0};
-
-  //int connectionMode [6] = {0,0,0,0,0};
-
   DictionaryDatum& get_connruledict();
 
   /**

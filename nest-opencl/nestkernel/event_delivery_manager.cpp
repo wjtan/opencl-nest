@@ -36,6 +36,8 @@
 
 // Includes from sli:
 #include "dictutils.h"
+
+//#define PROFILING
 #include "profile.h"
 
 namespace nest
@@ -513,6 +515,9 @@ EventDeliveryManager::deliver_events( thread t )
   // are we done?
   bool done = true;
 
+  thread thrd = t;
+  PROFILING_INIT();
+
   // deliver only at beginning of time slice
   if ( kernel().simulation_manager.get_from_step() > 0 )
   {
@@ -522,7 +527,7 @@ EventDeliveryManager::deliver_events( thread t )
 
   std::vector< int > pos( displacements_ );
 
-  const bool isGPU = kernel().simulation_manager.isGPU();
+  const bool isGPU = kernel().simulation_manager.isGPU(t);
 
   if ( not off_grid_spiking_ ) // on_grid_spiking
   {
@@ -553,7 +558,6 @@ EventDeliveryManager::deliver_events( thread t )
           se.set_stamp( prepared_timestamps[ lag ] );
           se.set_sender_gid( nid );
 
-          PROFILING_INIT();
           if (isGPU)
           {
             PROFILING_START();
@@ -563,11 +567,9 @@ EventDeliveryManager::deliver_events( thread t )
 
           if (isGPU)
           {
-            PROFILING_END("----\nconnection_manager send");
-
-            PROFILING_START();
-            kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
-            PROFILING_END("deliver_events");
+            //PROFILING_START();
+            //kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
+            //PROFILING_END("deliver_events");
           }
         }
         else
@@ -575,7 +577,9 @@ EventDeliveryManager::deliver_events( thread t )
       	  if (isGPU)
           {
             // Batch send
-	          kernel().simulation_manager.gpu_execution[t]->deliver_events();
+            PROFILING_START();
+            kernel().simulation_manager.gpu_execution[t]->deliver_events();
+            PROFILING_END_T("EventBatchSend");
           }
           --lag;
         }
@@ -630,7 +634,7 @@ EventDeliveryManager::deliver_events( thread t )
       read_from_comm_buffer( done_p, readpos );
       done = done && done_p;
     }
-  }
+  }/*
   else // off grid spiking
   {
     // prepare Time objects for every possible time stamp within min_delay_
@@ -673,8 +677,7 @@ EventDeliveryManager::deliver_events( thread t )
       }
       pos[ pid ] = pos_pid;
     }
-  }
-
+  }*/
   return done;
 }
 

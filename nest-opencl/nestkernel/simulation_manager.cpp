@@ -396,21 +396,6 @@ nest::SimulationManager::get_status( DictionaryDatum& d )
   def< long >( d, names::wfr_interpolation_order, wfr_interpolation_order_ );
 }
 
-inline
-bool
-nest::SimulationManager::isGPU() const
-{
-  const int thrd = kernel().vp_manager.get_thread_id();
-  return thrd < this->num_gpu_threads;
-}
-
-inline
-bool
-nest::SimulationManager::isGPU(const nest::thread thrd) const
-{
-  return thrd < this->num_gpu_threads;
-}
-
 void
 nest::SimulationManager::prepare()
 {
@@ -469,12 +454,9 @@ nest::SimulationManager::prepare()
     kernel().music_manager.enter_runtime( tick );
   }
 
-  //this->num_gpu_threads = 2;
-
-  if (gpu_execution.size() == 0)
+  if (this->num_gpu_threads > 0 && gpu_execution.empty())
   {
     gpu_execution.resize(this->num_gpu_threads);
-
     for (int i = 0; i < this->num_gpu_threads; i++)
       gpu_execution[i] = new GPUEXEC;
   }
@@ -642,6 +624,18 @@ nest::SimulationManager::call_update_()
      << "Not using MPI";
 #endif
 
+#ifdef EVENT_DELIVER
+  os << std::endl
+     << "GPU Processing Events";
+#endif
+#ifdef STATIC_DELIVER
+  os << std::endl
+     << "GPU Processing Static";
+#endif
+
+  cout << "Min Delay " << kernel().connection_manager.get_min_delay() << endl;
+  cout << "Max Delay " << kernel().connection_manager.get_max_delay() << endl;
+
   LOG( M_INFO, "SimulationManager::start_updating_", os.str() );
 
   if ( to_do_ == 0 )
@@ -690,9 +684,6 @@ nest::SimulationManager::wfr_update_( Node* n )
   return ( n->wfr_update( clock_, from_step_, to_step_ ) );
 }
 
-int cpuFileCount = 0;
-extern void writeNodes(nest::thread t, int count, const std::vector< nest::Node* > &nodes);
-
 void
 nest::SimulationManager::update_()
 {
@@ -720,15 +711,10 @@ nest::SimulationManager::update_()
     GPUEXEC* gpu_exc;
     PROFILING_INIT();
 
-    const bool isGPU = this->isGPU();
+    const bool isGPU = this->isGPU(thrd);
 
-    //#pragma omp critical
-    //cout << "[" << thrd << "] GPU: " << isGPU << endl;
-
-    //#pragma omp master
-    //{
-    //  gpu_execution[0]->in
-    //}
+    #pragma omp critical
+    cout << "[" << thrd << "] GPU: " << isGPU << endl;
 
     if (isGPU)
     {
@@ -778,7 +764,6 @@ nest::SimulationManager::update_()
     
           PROFILING_END_T("Pre Deliver events");
           //gpu_exc->insert_events();
-    
           PROFILING_START();
           kernel().event_delivery_manager.deliver_events( thrd );
           PROFILING_END_T("GPU Deliver events");
@@ -794,7 +779,7 @@ nest::SimulationManager::update_()
 
           PROFILING_START();
           //gpu_exc->deliver_events();
-          gpu_exc->deliver_static_events();
+          //gpu_exc->deliver_static_events();
           PROFILING_END_T("Deliver static events");
         } else {
           PROFILING_START();
@@ -955,22 +940,20 @@ nest::SimulationManager::update_()
         update_nodes_gpu(gpu_exc, thread_local_nodes);
         PROFILING_END_T("Gpu Update Nodes");
 
-        cout << "Mass Update " << gpu_exc->updated_nodes.size() << endl;
-
         PROFILING_START();
         gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
         PROFILING_END_T("Mass Update Nodes");
 
         PROFILING_START();
+        //gpu_exc->pre_deliver_event();
         gpu_exc->deliver_events();
+        //gpu_exc->post_deliver_event();
         //gpu_exc->deliver_static_events();
         PROFILING_END_T("Spike deliver");
       } else {
         PROFILING_START();
         update_nodes(thread_local_nodes);
         PROFILING_END_T("CPU Update Nodes");
-
-        //writeNodes(thrd, cpuFileCount++, thread_local_nodes);
       }
 
       gettimeofday( &t_slice_end_, NULL );
@@ -1055,13 +1038,6 @@ nest::SimulationManager::update_()
     }
   }
 
-  //long total = 0;
-  //for(index i = 0; i < kernel().vp_manager.get_num_threads(); i++) {
-  //  std::cout << "{P} Spikes[" << i << "]: " << this->spikes[i] << std::endl;
-  //  total += this->spikes[i];
-  //}
-  //std::cout << "{P} Total Spikes: " << total << std::endl;
-
   //kernel().vp_manager.omp_set_threads();
 }
 
@@ -1133,9 +1109,11 @@ nest::SimulationManager::advance_time_()
     ++slice_;
     kernel().event_delivery_manager.update_moduli();
     from_step_ = 0;
-    const int thrd = kernel().vp_manager.get_thread_id();
-    if (isGPU(thrd))
-      kernel().simulation_manager.gpu_execution[thrd]->advance_time();
+    
+    // Advance all time
+    for (int i = 0; i < this->num_gpu_threads; i++)
+      gpu_execution[i]->advance_time();
+
   }
   else
   {
@@ -1191,8 +1169,3 @@ nest::SimulationManager::get_previous_slice_origin() const
 {
   return clock_ - Time::step( kernel().connection_manager.get_min_delay() );
 }
-
-// void nest::SimulationManager::incSpikes() {
-//   const int thrd = kernel().vp_manager.get_thread_id();
-//   this->spikes[thrd]++;
-// }

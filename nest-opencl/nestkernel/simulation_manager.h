@@ -159,7 +159,6 @@ public:
   //void incSpikes();
 
   // If thread is GPU
-  bool isGPU() const;
   bool isGPU(thread thrd) const;
 
   std::vector<model_gpu*> gpu_execution;
@@ -271,6 +270,14 @@ SimulationManager::get_wfr_interpolation_order() const
 {
   return wfr_interpolation_order_;
 }
+
+inline
+bool
+nest::SimulationManager::isGPU(const nest::thread thrd) const
+{
+  return thrd < this->num_gpu_threads;
+}
+
 }
 
 

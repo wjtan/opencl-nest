@@ -57,7 +57,11 @@
 #include "token.h"
 #include "tokenutils.h"
 
-#include "../models/hh_psc_alpha_gap.h"
+//#include "../models/hh_psc_alpha_gap.h"
+
+#define PROFILING
+#include "profile.h"
+
 
 #ifdef USE_PMA
 #include "allocator.h"

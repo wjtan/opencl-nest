@@ -371,8 +371,6 @@ iaf_psc_alpha::update( Time const& origin, const long from, const long to )
       set_spiketime( Time::step( origin.get_steps() + lag + 1 ) );
       SpikeEvent se;
       kernel().event_delivery_manager.send( *this, se, lag );
-
-      //kernel().simulation_manager.incSpikes();
     }
 
     // set new input current
@@ -393,6 +391,7 @@ iaf_psc_alpha::handle( SpikeEvent& e )
   //     std::cout << e.get_sender_gid() << " " << this->get_gid() << " " << e.get_multiplicity() << " " << e.get_weight() << std::endl;
   //     getchar();
   //   }
+
   // START GPU EVENT HANDLE
   const int thrd = kernel().vp_manager.get_thread_id();
   if(kernel().simulation_manager.isGPU(thrd))
@@ -433,7 +432,7 @@ iaf_psc_alpha::handle( CurrentEvent& e )
 {
   assert( e.get_delay() > 0 );
 
-  // std::cout << e.get_sender_gid() << " " << this->get_lid() << " " << e.get_weight() << std::endl;
+ // std::cout << "CurrentEvent" << e.get_sender_gid() << " " << this->get_lid() << " " << e.get_weight() << std::endl;
   // getchar();
 
   const double I = e.get_current();
