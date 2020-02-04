@@ -565,12 +565,14 @@ EventDeliveryManager::deliver_events( thread t )
 
           kernel().connection_manager.send( t, nid, se );
 
+#ifdef STATIC
           if (isGPU)
           {
-            //PROFILING_START();
-            //kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
-            //PROFILING_END("deliver_events");
+            PROFILING_START();
+            kernel().simulation_manager.gpu_execution[t]->insert_static_event(se);
+            PROFILING_END("deliver_events");
           }
+#endif
         }
         else
         {

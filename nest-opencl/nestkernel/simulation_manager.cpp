@@ -737,9 +737,10 @@ nest::SimulationManager::update_()
       //gpu_exc->num_local_nodes = thread_local_nodes.size();
 
       cout << "[" << thrd << "] init_device" << endl;
+#ifdef STATIC
       kernel().event_delivery_manager.deliver_build_graph_events( thrd );
+#endif
       gpu_exc->initialize();
-      gpu_exc->init_device = true;
       cout << "[" << thrd << "] done" << endl;
 
       PROFILING_END_T("Initialize");
@@ -771,16 +772,16 @@ nest::SimulationManager::update_()
           //#pragma omp critical
           //printf("[%d] Deliver Events - batchSize: %ld\n", thrd, kernel().event_delivery_manager.totalBatchSize);
 
-          //gpu_exc->deliver_events();
           PROFILING_START();
           //gpu_exc->post_deliver_event(thread_local_nodes);
           gpu_exc->post_deliver_event();
           PROFILING_END_T("Post Deliver events");
 
+#ifdef STATIC
           PROFILING_START();
-          //gpu_exc->deliver_events();
-          //gpu_exc->deliver_static_events();
+          gpu_exc->deliver_static_events();
           PROFILING_END_T("Deliver static events");
+#endif
         } else {
           PROFILING_START();
           kernel().event_delivery_manager.deliver_events( thrd );
@@ -946,10 +947,7 @@ nest::SimulationManager::update_()
         PROFILING_END_T("Mass Update Nodes");
 
         PROFILING_START();
-        //gpu_exc->pre_deliver_event();
         gpu_exc->deliver_events();
-        //gpu_exc->post_deliver_event();
-        //gpu_exc->deliver_static_events();
         PROFILING_END_T("Spike deliver");
       } else {
         PROFILING_START();

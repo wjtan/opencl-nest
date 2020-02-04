@@ -10,6 +10,8 @@
 // #define PROFILING_SIZE
 #include "profile.h"
 
+//#define STATIC
+
 nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
 cl::Context nest::iaf_psc_alpha_gpu::context;
 cl::Program nest::iaf_psc_alpha_gpu::program;
@@ -23,7 +25,7 @@ nest::iaf_psc_alpha_gpu::iaf_psc_alpha_gpu()
   , event_multiplicity( 1 )
   , ring_buffer_size( 0 )
 ///
-  , is_initialized( false )
+  , is_nodes_initialized( false )
   , is_ring_buffer_ready( false )
   , is_gpu_initialized( false )
   , is_history_initialized( false )
@@ -136,7 +138,9 @@ nest::iaf_psc_alpha_gpu::initialize_gpu()
       }
 
       this->total_num_nodes = kernel().node_manager.size();
+#ifdef STATIC
       connections.resize(total_num_nodes);
+#endif
       is_gpu_initialized = true;
     }
 }
@@ -195,7 +199,7 @@ nest::iaf_psc_alpha_gpu::mass_update_(
   //int thrd_id = kernel().vp_manager.get_thread_id();
   //#endif  
   
-  initialize_device();
+  initialize_nodes();
   
   // TODO: for now, I assume that these are the same for all nodes
 
@@ -302,7 +306,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
 
       if (list_platform.empty()) {
         std::cerr << "OpenCL platforms not found." << std::endl;
-        return 1;
+        exit(-1);
       }
 
       //gpu_context.platform = list_platform[1];
@@ -312,7 +316,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
         gpu_context.platform = list_platform[1];
       }
 
-      //std::cout << "Select Platform: " << gpu_context.platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
+      std::cout << "Select Platform: " << gpu_context.platform.getInfo<CL_PLATFORM_NAME>() << std::endl;
 
       gpu_context.platform.getDevices(CL_DEVICE_TYPE_GPU, &gpu_context.list_device);
       //gpu_context.platform.getDevices(CL_DEVICE_TYPE_CPU, &gpu_context.list_device);
@@ -326,7 +330,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
       if (!fs)
       {
         std::cerr << "Failed to load kernel file." << std::endl;
-        return 1;
+        exit(-1);
       }
 
       char *source_str = (char *)malloc(MAX_SOURCE_SIZE);
@@ -339,12 +343,12 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
 
       try {
         program.build(gpu_context.list_device, "-cl-nv-maxrregcount=200 -cl-nv-verbose");
-      } catch (const cl::Error&) {
+      } catch (const cl::Error &err) {
         std::cerr
           << "OpenCL compilation error" << std::endl
           << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(gpu_context.list_device[0])
           << std::endl;
-        return 1;
+        throw err;
       }
 
       const int n_devices = gpu_context.list_device.size();
@@ -357,10 +361,10 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
     }
     catch (const cl::Error &err) {
       std::cerr
-          << "OpenCL error: "
+          << "OpenCL error: initialize_opencl_context: "
           << err.what() << "(" << err.err() << ")"
           << std::endl;
-      return 1;
+      throw err;
     }
 
   return 0;
@@ -381,19 +385,19 @@ nest::iaf_psc_alpha_gpu::initialize_command_queue()
   }
   catch (const cl::Error &err) {
     std::cerr
-        << "OpenCL error: "
+        << "OpenCL error: initialize_command_queue:"
         << err.what() << "(" << err.err() << ")"
         << std::endl;
-    return 1;
+    throw err;
   }
 
   return 0;
 }
 
 void
-nest::iaf_psc_alpha_gpu::initialize_device()
+nest::iaf_psc_alpha_gpu::initialize_nodes()
 {
-  if (!is_initialized)
+  if (!is_nodes_initialized)
     {
       int thrd_id = kernel().vp_manager.get_thread_id();
       int len = this->num_local_nodes;
@@ -461,7 +465,7 @@ nest::iaf_psc_alpha_gpu::initialize_device()
       create(&gpu_context, &S__y0_, len*sizeof(double));
       create(&gpu_context, &d_spike_count, len*sizeof(unsigned int));
 
-      is_initialized = true;
+      is_nodes_initialized = true;
     }
 }
 
@@ -933,16 +937,11 @@ nest::iaf_psc_alpha_gpu::fill_buffer_zero_uint(clContext_ *clCxt, cl::Buffer &bu
     }
 }
 
-
 void
-nest::iaf_psc_alpha_gpu::initialize()
+nest::iaf_psc_alpha_gpu::initialize_ring_buffers()
 {
   if (not is_ring_buffer_ready)
   {
-    if (initialize_command_queue())
-      return;
-
-      
     event_size = kernel().connection_manager.get_min_delay()
       + kernel().connection_manager.get_max_delay();
     ring_buffer_size = this->num_local_nodes * event_size;
@@ -981,7 +980,11 @@ nest::iaf_psc_alpha_gpu::initialize()
     
     is_ring_buffer_ready = true;
   }
+}
 
+void
+nest::iaf_psc_alpha_gpu::initialize_connections()
+{
   for (vector<vector<connection_info> >::iterator tgt_it = connections.begin();
        tgt_it != connections.end();
        tgt_it++)
@@ -1024,11 +1027,26 @@ nest::iaf_psc_alpha_gpu::initialize()
 
   synchronize();
 
-  getKernel("update", "deliver_events_stdp_pl", "deliver_events", &gpu_context);
-
   delete[] h_connections_ptr; h_connections_ptr = NULL;
   delete[] h_connections; h_connections = NULL;
   delete[] h_connections_weight; h_connections_weight = NULL;
+}
+
+void
+nest::iaf_psc_alpha_gpu::initialize()
+{
+  if (!init_device) {
+    if (initialize_command_queue())
+      return;
+
+    getKernel("update", "deliver_events_stdp_pl", "deliver_events", &gpu_context);
+    initialize_ring_buffers();
+#ifdef STATIC
+    initialize_connections();
+#endif
+
+    init_device = true;
+  }
 }
 
 void
@@ -1201,6 +1219,7 @@ nest::iaf_psc_alpha_gpu::deliver_events()
 void
 nest::iaf_psc_alpha_gpu::deliver_static_events()
 {
+#ifdef STATIC
   int static_batch_size = list_sgid.size();
   
   //int thrd_id = kernel().vp_manager.get_thread_id();
@@ -1245,6 +1264,7 @@ nest::iaf_psc_alpha_gpu::deliver_static_events()
     delete[] h_spike_pos;
     list_sgid.clear();
   }
+#endif
 }
 
 void
@@ -1255,10 +1275,12 @@ nest::iaf_psc_alpha_gpu::copy_event_data(std::vector<Node *> nodes)
 void
 nest::iaf_psc_alpha_gpu::handle(index sgid, index tgid, double weight_)
 {
+#ifdef STATIC
   connection_info info;
   info.tgt_id = tgid;
   info.weight = weight_;
   connections[sgid].push_back(info);
+#endif
 }
 
 void nest::iaf_psc_alpha_gpu::handle( SpikeEvent& e )
@@ -1446,7 +1468,10 @@ void nest::iaf_psc_alpha_gpu::insert_static_event(SpikeEvent& e)
   conn_info.multiplicity = e.get_multiplicity();
   conn_info.type = 1;
   list_spikes.push_back(conn_info);*/
+
+#ifdef STATIC
   list_sgid.push_back(e);
+#endif
 }
 
 void nest::iaf_psc_alpha_gpu::insert_event(SpikeEvent& e)

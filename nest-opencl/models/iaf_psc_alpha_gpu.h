@@ -134,7 +134,7 @@ namespace nest
     // cl::Buffer d_ex_spikes__index;
     // cl::Buffer d_in_spikes__index;
 
-    bool is_initialized;
+    bool is_nodes_initialized;
     bool is_gpu_initialized;
     bool is_ring_buffer_ready;
     bool is_history_initialized;
@@ -291,7 +291,10 @@ namespace nest
 		       const bool called_from_wfr_update );
 
     int initialize_opencl_context();
-    void initialize_device();
+    void initialize_nodes();
+    void initialize_ring_buffers();
+    void initialize_connections();
+
     int initialize_command_queue();
     //void prepare_copy_to_device(std::vector< Node* > &nodes, bool called_from_wfr_update, long lag_);
     void copy_data_to_device(const std::vector< Node* > &nodes);
