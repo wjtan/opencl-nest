@@ -456,8 +456,11 @@ nest::SimulationManager::prepare()
   {
     cout << "Creating GPU Execution" << endl;
     gpu_execution.resize(this->num_gpu_threads);
-    for (int i = 0; i < this->num_gpu_threads; i++)
-      gpu_execution[i] = new GPUEXEC;
+    for (int i = 0; i < this->num_gpu_threads; i++) {
+      GPUEXEC* exe = new GPUEXEC;
+      gpu_execution[i] = exe;
+      exe->initialize_gpu();
+    }
   }
 }
 
@@ -638,9 +641,6 @@ nest::SimulationManager::call_update_()
   os << std::endl << "CPU Kernel";
 #endif
 
-  cout << "Min Delay " << kernel().connection_manager.get_min_delay() << endl;
-  cout << "Max Delay " << kernel().connection_manager.get_max_delay() << endl;
-
   LOG( M_INFO, "SimulationManager::start_updating_", os.str() );
 
   if ( to_do_ == 0 )
@@ -692,9 +692,6 @@ nest::SimulationManager::wfr_update_( Node* n )
 void
 nest::SimulationManager::update_()
 {
-  //for(index i = 0; i < kernel().vp_manager.get_num_threads(); i++)
-  //  this->spikes[i] = 0;
-
   // to store done values of the different threads
   std::vector< bool > done;
   bool done_all = true;
@@ -724,7 +721,9 @@ nest::SimulationManager::update_()
     if (isGPU)
     {
       gpu_exc = (GPUEXEC*) gpu_execution[thrd];
-      gpu_exc->initialize_gpu();
+
+      //#pragma omp critical
+      //gpu_exc->initialize_gpu();
     }
     
     /********************************************************************************/
@@ -735,23 +734,29 @@ nest::SimulationManager::update_()
 
     if (isGPU && not gpu_exc->init_device)
     {
-      #pragma omp critical
+      //#pragma omp critical
       {
-        PROFILING_START();
+        try {
+          PROFILING_START();
 
-        //gpu_exc->total_num_nodes = kernel().node_manager.size();
-        gpu_exc->initialize_nodes();
-        //gpu_exc->num_local_nodes = thread_local_nodes.size();
+          //gpu_exc->total_num_nodes = kernel().node_manager.size();
+          gpu_exc->initialize_nodes();
+          //gpu_exc->num_local_nodes = thread_local_nodes.size();
 
-        cout << "[" << thrd << "] init_device" << endl;
+          cout << "[" << thrd << "] init_device" << endl;
 #ifdef STATIC
-        kernel().event_delivery_manager.deliver_build_graph_events( thrd );
+          kernel().event_delivery_manager.deliver_build_graph_events( thrd );
 #endif
-        
-        gpu_exc->initialize();
-        cout << "[" << thrd << "] done" << endl;
+          
+          gpu_exc->initialize();
+          cout << "[" << thrd << "] done" << endl;
 
-        PROFILING_END_T("Initialize");
+          PROFILING_END_T("Initialize");
+        } catch ( std::exception& e ) {
+          // so throw the exception after parallel region
+          exceptions_raised.at( thrd ) =
+            lockPTR< WrappedThreadException >( new WrappedThreadException( e ) );
+        }
       }
     }
 
@@ -764,33 +769,39 @@ nest::SimulationManager::update_()
       {
         if (isGPU)
         {
-          gpu_exc->update_type = 1;
+            gpu_exc->update_type = 1;
 
-          PROFILING_START();
+          try {
+            PROFILING_START();
 
-          gpu_exc->clear_buffer();
-          //gpu_exc->pre_deliver_event(thread_local_nodes);
-          gpu_exc->pre_deliver_event();
-    
-          PROFILING_END_T("Pre Deliver events");
-          //gpu_exc->insert_events();
-          PROFILING_START();
-          kernel().event_delivery_manager.deliver_events( thrd );
-          PROFILING_END_T("GPU Deliver events");
+            gpu_exc->clear_buffer();
+            //gpu_exc->pre_deliver_event(thread_local_nodes);
+            gpu_exc->pre_deliver_event();
+      
+            PROFILING_END_T("Pre Deliver events");
+            //gpu_exc->insert_events();
+            PROFILING_START();
+            kernel().event_delivery_manager.deliver_events( thrd );
+            PROFILING_END_T("GPU Deliver events");
 
-          //#pragma omp critical
-          //printf("[%d] Deliver Events - batchSize: %ld\n", thrd, kernel().event_delivery_manager.totalBatchSize);
+            //#pragma omp critical
+            //printf("[%d] Deliver Events - batchSize: %ld\n", thrd, kernel().event_delivery_manager.totalBatchSize);
 
-          PROFILING_START();
-          //gpu_exc->post_deliver_event(thread_local_nodes);
-          gpu_exc->post_deliver_event();
-          PROFILING_END_T("Post Deliver events");
+            PROFILING_START();
+            //gpu_exc->post_deliver_event(thread_local_nodes);
+            gpu_exc->post_deliver_event();
+            PROFILING_END_T("Post Deliver events");
 
 #ifdef STATIC
-          PROFILING_START();
-          gpu_exc->deliver_static_events();
-          PROFILING_END_T("Deliver static events");
+            PROFILING_START();
+            gpu_exc->deliver_static_events();
+            PROFILING_END_T("Deliver static events");
 #endif
+          } catch ( std::exception& e ) {
+            // so throw the exception after parallel region
+            exceptions_raised.at( thrd ) =
+              lockPTR< WrappedThreadException >( new WrappedThreadException( e ) );
+          }
         } else {
           PROFILING_START();
           kernel().event_delivery_manager.deliver_events( thrd );
@@ -946,18 +957,24 @@ nest::SimulationManager::update_()
         gpu_exc->update_type = 2;
         //if (gpu_exc->updated_nodes.empty())
 
-        //PROFILING_START();
-        //update_nodes_gpu(gpu_exc, thread_local_nodes);
-        //PROFILING_END_T("Gpu Update Nodes");
+        try {
+          //PROFILING_START();
+          //update_nodes_gpu(gpu_exc, thread_local_nodes);
+          //PROFILING_END_T("Gpu Update Nodes");
 
-        PROFILING_START();
-        //gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
-        gpu_exc->mass_update(clock_, from_step_, to_step_ );
-        PROFILING_END_T("Mass Update Nodes");
+          PROFILING_START();
+          //gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
+          gpu_exc->mass_update(clock_, from_step_, to_step_ );
+          PROFILING_END_T("Mass Update Nodes");
 
-        PROFILING_START();
-        gpu_exc->deliver_events();
-        PROFILING_END_T("Spike deliver");
+          PROFILING_START();
+          gpu_exc->deliver_events();
+          PROFILING_END_T("Spike deliver");
+        } catch ( std::exception& e ) {
+          // so throw the exception after parallel region
+          exceptions_raised.at( thrd ) =
+            lockPTR< WrappedThreadException >( new WrappedThreadException( e ) );
+        }
       } else {
         PROFILING_START();
         update_nodes(thread_local_nodes);

@@ -77,11 +77,11 @@ namespace nest
       std::vector<cl::Device> list_device;
     };
 
-    static clContext_ gpu_context;
+    clContext_ gpu_context; //static clContext_ gpu_context;
     bool is_data_ready;
 
-    static cl::Context context;
-    static cl::Program program;
+    cl::Context context; //static cl::Context context;
+    cl::Program program; //static cl::Program program;
     cl::CommandQueue command_queue;
     cl::Kernel *gpu_kernel;
     cl::Kernel *deliver_kernel;

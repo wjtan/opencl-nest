@@ -12,9 +12,9 @@
 
 //#define STATIC
 
-nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
-cl::Context nest::iaf_psc_alpha_gpu::context;
-cl::Program nest::iaf_psc_alpha_gpu::program;
+//nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
+//cl::Context nest::iaf_psc_alpha_gpu::context;
+//cl::Program nest::iaf_psc_alpha_gpu::program;
 //nest::index nest::iaf_psc_alpha_gpu::model_id;
 
 nest::iaf_psc_alpha_gpu::iaf_psc_alpha_gpu()
@@ -79,7 +79,7 @@ nest::iaf_psc_alpha_gpu::iaf_psc_alpha_gpu()
   , h_tau_minus_inv_ (NULL)
 
 {
-  list_spikes.reserve(10000000);
+  //list_spikes.reserve(10000000);
 }
 
 nest::iaf_psc_alpha_gpu::~iaf_psc_alpha_gpu()
@@ -132,8 +132,8 @@ nest::iaf_psc_alpha_gpu::initialize_gpu()
 {
   if (not is_gpu_initialized)
     {
-      int thrd = kernel().vp_manager.get_thread_id();
-      if (thrd == 0)
+      //int thrd = kernel().vp_manager.get_thread_id();
+      //if (thrd == 0)
       {
         //const Token model = kernel().model_manager.get_modeldict()->lookup( "iaf_psc_alpha" );
         //model_id = static_cast< index >( model );
@@ -253,7 +253,8 @@ nest::iaf_psc_alpha_gpu::mass_update_(
       PROFILING_END("Spike send");
     } 
   } catch (cl::Error &err) {
-    std::cerr << "Mass Update - " << err.what() << "(" << err.err() << ")" << std::endl;
+    #pragma omp critical
+    std::cerr << "Mass Update " << err.what() << "(" << err.err() << ")" << std::endl;
     throw err;
   }
 
@@ -330,6 +331,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
       try {
         program.build(gpu_context.list_device, "-cl-nv-maxrregcount=200 -cl-nv-verbose");
       } catch (const cl::Error &err) {
+        #pragma omp critical
         std::cerr
           << "OpenCL compilation error" << std::endl
           << program.getBuildInfo<CL_PROGRAM_BUILD_LOG>(gpu_context.list_device[0])
@@ -346,6 +348,7 @@ nest::iaf_psc_alpha_gpu::initialize_opencl_context()
 
     }
     catch (const cl::Error &err) {
+      #pragma omp critical
       std::cerr
           << "OpenCL error: initialize_opencl_context: "
           << err.what() << "(" << err.err() << ")"
@@ -370,6 +373,7 @@ nest::iaf_psc_alpha_gpu::initialize_command_queue()
     this->command_queue = cl::CommandQueue(context, gpu_context.list_device[vp_id % num_gpus]);
   }
   catch (const cl::Error &err) {
+    #pragma omp critical
     std::cerr
         << "OpenCL error: initialize_command_queue:"
         << err.what() << "(" << err.err() << ")"
@@ -654,6 +658,7 @@ nest::iaf_psc_alpha_gpu::create(clContext_ *clCxt, cl::Buffer *mem, int len)
   try {
     *mem = cl::Buffer(context, CL_MEM_READ_WRITE, len);
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "OpenCL createBuffer" << err.what() << "(" << err.err() << ")" << std::endl;
     throw err;
   }
@@ -670,6 +675,7 @@ nest::iaf_psc_alpha_gpu::upload(clContext_ *clCxt, void *data, cl::Buffer &gdata
   try {
     this->command_queue.enqueueWriteBuffer(gdata, CL_FALSE, 0, datalen, (void *)data, NULL, NULL);
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "OpenCL enqueueWriteBuffer " << err.what() << "(" << err.err() << ") len=" << datalen << std::endl;
     throw err;
   }
@@ -685,6 +691,7 @@ nest::iaf_psc_alpha_gpu::download(clContext_ *clCxt, cl::Buffer &gdata,void *dat
   try {
     this->command_queue.enqueueReadBuffer(gdata, CL_FALSE, offset, data_len, (void *)data, NULL,NULL);
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "OpenCL enqueueReadBuffer " << err.what() << "(" << err.err() << ") len=" << data_len << std::endl;
     throw err;
   }
@@ -696,6 +703,7 @@ nest::iaf_psc_alpha_gpu::synchronize()
   try {
     this->command_queue.finish();
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "OpenCL synchronize() " << err.what() << "(" << err.err() << ")" << std::endl;
     throw err;
   }
@@ -862,6 +870,7 @@ nest::iaf_psc_alpha_gpu::execute_kernel(cl::Kernel *kernel, clContext_ *clCxt, s
   try {
     this->command_queue.enqueueNDRangeKernel(*(kernel), cl::NullRange, global_work_size, local_work_size);
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "Execute Kernel - " << err.what() << "(" << err.err() << ")" << std::endl;
     throw err;
   }
@@ -969,6 +978,7 @@ nest::iaf_psc_alpha_gpu::initialize_ring_buffers()
       is_ring_buffer_ready = true;
     }
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "OpenCL Init Ringbuffer " << err.what() << "(" << err.err() << ")" << std::endl;
     throw err;
   }
@@ -1167,6 +1177,7 @@ nest::iaf_psc_alpha_gpu::deliver_events()
           conn_type = 1;
         }
       } catch (cl::Error &err) {
+        #pragma omp critical
         std::cerr << "OpenCL enqueueWriteBuffer " << err.what() << "(" << err.err() << ") BatchSize: " << batch_size << std::endl;
         throw err;
       }
@@ -1220,6 +1231,7 @@ nest::iaf_psc_alpha_gpu::deliver_events()
     
       list_spikes.clear();
     } catch (cl::Error &err) {
+      #pragma omp critical
       std::cerr << "OpenCL deliverEvents " << err.what() << "(" << err.err() << ") BatchSize: " << batch_size << std::endl;
       throw err;
     }
@@ -1375,6 +1387,7 @@ void nest::iaf_psc_alpha_gpu::pre_deliver_event()
 
     synchronize();
   } catch (cl::Error &err) {
+    #pragma omp critical
     std::cerr << "OpenCL Pre deliver event " << err.what() << "(" << err.err() << ")" << std::endl;
     throw err;
   }
