@@ -2,6 +2,7 @@
 #define IAF_PSC_ALPHA_CPU_H
 
 #include "model_gpu.h"
+#include "iaf_psc_alpha.h"
 
 #include "../gsl/gsl_errno.h"
   // #include "gsl_matrix.h"
@@ -34,10 +35,14 @@ namespace nest
     ~iaf_psc_alpha_cpu();
 
     void initialize_gpu();
-    void initialize_nodes(const std::vector< Node* > &nodes);
+    void initialize_nodes();
+    
+    bool mass_wfr_update(Time const& origin, const long from, const long to ) { return mass_update_(origin, from, to, true ); }
+    void mass_update(Time const& origin, const long from, const long to ) { mass_update_(origin, from, to, false ); }
 
-    bool mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to );
-    void mass_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to );
+    bool mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ) { return mass_update_(origin, from, to, true); }
+    void mass_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ){ mass_update_(origin, from, to, false); }
+
     void clear_buffer();
     void initialize();
     void fill_event_buffer(SecondaryEvent& e);
@@ -49,11 +54,11 @@ namespace nest
 
     void handle(index sgid, index tgid);
 
-    void pre_deliver_event(const std::vector< Node* > &nodes);
-    void post_deliver_event(const std::vector< Node* > &nodes);
-
     void pre_deliver_event();
     void post_deliver_event();
+
+    void pre_deliver_event(const std::vector< Node* > &nodes) { pre_deliver_event(); }
+    void post_deliver_event(const std::vector< Node* > &nodes) { post_deliver_event(); }
 
     void handle(Event &e, double last_t_spike, const CommonSynapseProperties *cp, void *conn, int type);
     void handle(index sgid, index tgid, double weight);
@@ -65,6 +70,8 @@ namespace nest
     void advance_time();
 
     bool isLocalNode(const index i) const;
+
+    size_t max_num_spikes = 0;
   private:
 
     // struct clContext_
@@ -74,7 +81,7 @@ namespace nest
     // };
 
     // static clContext_ gpu_context;
-    bool is_data_ready;
+    //bool is_data_ready;
 
     // static cl::Context context;
     // static cl::Program program;
@@ -83,13 +90,16 @@ namespace nest
     // cl::Kernel *deliver_kernel;
     // cl::Kernel *static_deliver_kernel;
 
+    const index model_id = 12;
+
+    /*****************************************************/
+    // Connections
+#if STATIC
     typedef struct connection_info {
       int tgt_id;
       double weight;
     } connection_info;
-    
-    /*****************************************************/
-    // Connections
+
     vector< vector<connection_info> > connections;
     vector< SpikeEvent > list_sgid;
     
@@ -100,6 +110,7 @@ namespace nest
     // cl::Buffer d_connections_ptr;
     // cl::Buffer d_connections;
     // cl::Buffer d_connections_weight;
+#endif
     /*****************************************************/
  
     size_t event_size;
@@ -131,8 +142,9 @@ namespace nest
 // cl::Buffer d_ex_spikes__index;
 // cl::Buffer d_in_spikes__index;
 
-    bool is_initialized;
     bool is_gpu_initialized;
+    bool is_node_initialized = false;
+
     bool is_ring_buffer_ready;
   
 // cl::Buffer S__y3_;
@@ -273,7 +285,7 @@ double* h_S__y0_;
     
     vector< synapse_info > list_spikes;
 
-    vector< Node* > actualNodes;
+    vector< nest::iaf_psc_alpha* > actualNodes;
     vector< Node* > otherNodes;
 
     int time_index;
@@ -282,18 +294,20 @@ double* h_S__y0_;
 
     size_t history_size;
 
-    bool mass_update_( const std::vector< Node* > &nodes,
+    bool mass_update_(
 		       Time const& origin,
 		       const long from,
 		       const long to,
 		       const bool called_from_wfr_update );
 
     //int initialize_opencl_context();
-    void initialize_device();
+    void allocate_nodes();
+    void initialize_ring_buffers();
+    void initialize_connections();
     //int initialize_command_queue();
     //void prepare_copy_to_device(std::vector< Node* > &nodes, bool called_from_wfr_update, long lag_);
-    void copy_data_to_device(const std::vector< Node* > &nodes);
-    void copy_data_from_device(const std::vector< Node* > &nodes, bool last_copy);
+    void copy_data_to_device(const std::vector< nest::iaf_psc_alpha* > &nodes);
+    void copy_data_from_device(const std::vector< nest::iaf_psc_alpha* > &nodes, bool last_copy);
 
     void copy_spike_to_device(const long lag);
     void copy_spike_from_device();

@@ -2,6 +2,7 @@
 #define IAF_PSC_ALPHA_GPU_H
 
 #include "model_gpu.h"
+#include "iaf_psc_alpha.h"
 
 #include "../gsl/gsl_errno.h"
   // #include "gsl_matrix.h"
@@ -35,10 +36,10 @@ namespace nest
     ~iaf_psc_alpha_gpu();
 
     void initialize_gpu();
-    void initialize_nodes(const std::vector< Node* > &nodes);
+    void initialize_nodes();
 
-    bool mass_wfr_update(Time const& origin, const long from, const long to );
-    void mass_update(Time const& origin, const long from, const long to );
+    bool mass_wfr_update(Time const& origin, const long from, const long to ) { mass_update_(origin, from, to, true ); }
+    void mass_update(Time const& origin, const long from, const long to ) { mass_update_(origin, from, to, false ); }
 
     bool mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ) { return mass_wfr_update(origin, from, to); }
     void mass_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ){ mass_update(origin, from, to); }
@@ -85,6 +86,9 @@ namespace nest
     cl::Kernel *gpu_kernel;
     cl::Kernel *deliver_kernel;
     cl::Kernel *static_deliver_kernel;
+
+    //static index model_id;
+    const index model_id = 12;
 
     /*****************************************************/
     // Connections
@@ -275,7 +279,7 @@ namespace nest
     
     vector< synapse_info > list_spikes;
 
-    vector< Node* > actualNodes;
+    vector< nest::iaf_psc_alpha* > actualNodes;
     vector< Node* > otherNodes;
 
     int time_index;
@@ -291,14 +295,14 @@ namespace nest
 		       const bool called_from_wfr_update );
 
     int initialize_opencl_context();
-    void initialize_nodes();
+    void allocate_nodes();
     void initialize_ring_buffers();
     void initialize_connections();
 
     int initialize_command_queue();
     //void prepare_copy_to_device(std::vector< Node* > &nodes, bool called_from_wfr_update, long lag_);
-    void copy_data_to_device(const std::vector< Node* > &nodes);
-    void copy_data_from_device(const std::vector< Node* > &nodes, bool last_copy);
+    void copy_data_to_device(const std::vector< nest::iaf_psc_alpha* > &nodes);
+    void copy_data_from_device(const std::vector< nest::iaf_psc_alpha* > &nodes, bool last_copy);
     //int check_data(std::vector< Node* > &nodes, int dimension);
     void create(clContext_ *clCxt, cl::Buffer *mem, int len);
     void upload(clContext_ *clCxt, void *data,cl::Buffer &gdata,int datalen);

@@ -24,13 +24,13 @@
 #define IAF_PSC_ALPHA_H
 
 // Includes from nestkernel:
-#include "archiving_node.h"
-#include "connection.h"
-#include "event.h"
-#include "nest_types.h"
-#include "recordables_map.h"
-#include "ring_buffer.h"
-#include "universal_data_logger.h"
+#include "../nestkernel/archiving_node.h"
+#include "../nestkernel/connection.h"
+#include "../nestkernel/event.h"
+#include "../nestkernel/nest_types.h"
+#include "../nestkernel/recordables_map.h"
+#include "../nestkernel/ring_buffer.h"
+#include "../nestkernel/universal_data_logger.h"
 
 /* BeginDocumentation
 Name: iaf_psc_alpha - Leaky integrate-and-fire neuron model.

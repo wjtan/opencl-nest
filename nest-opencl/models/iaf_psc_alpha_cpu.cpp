@@ -1,6 +1,5 @@
 #include "iaf_psc_alpha_cpu.h"
 #include "iaf_psc_alpha_cpu_kernel.h"
-#include "iaf_psc_alpha.h"
 
 // Includes from nestkernel:
 #include "exceptions.h"
@@ -16,18 +15,22 @@ const size_t OFFSET = 0;
 //#include <fstream>
 //extern void writeNodes(nest::thread t, int count, double* y0, double* y3, double* in, double* out, size_t num_nodes);
 
+//nest::index nest::iaf_psc_alpha_cpu::model_id;
+
 nest::iaf_psc_alpha_cpu::iaf_psc_alpha_cpu()
-  : is_data_ready( false )
-  , graph_size( 0 )
   //, h_connections_ptr( NULL )
   //, h_connections( NULL )
-  , event_size( 0 )
+  : event_size( 0 )
   , event_multiplicity( 1 )
   , ring_buffer_size( 0 )
-  , is_initialized( false )
+  , is_node_initialized( false )
   , is_ring_buffer_ready( false )
   , is_gpu_initialized( false )
+  , isHistory ( false )
   , time_index (0)
+#ifdef STATIC
+  , graph_size( 0 )
+#endif
  , h_S__y3_( NULL )
  , h_P__Theta_( NULL )
  , h_V__P22_ex_( NULL )
@@ -71,12 +74,12 @@ nest::iaf_psc_alpha_cpu::iaf_psc_alpha_cpu()
 //, h_ex_spikes__index( NULL )
 //, h_in_spikes__index( NULL )
   , h_spike_count (NULL)
-  , isHistory (false)
 //  , h_history_ptr (NULL)
 //  , h_Kminus_ (NULL)
 //  , h_tau_minus_inv_ (NULL)
 
 {
+  list_spikes.reserve(10000000);
 }
 
 nest::iaf_psc_alpha_cpu::~iaf_psc_alpha_cpu()
@@ -133,32 +136,46 @@ nest::iaf_psc_alpha_cpu::initialize_gpu()
 {
   // std::cout << "iaf_psc_alpha_cpu::initialize_gpu" << std::endl;
   if (not is_gpu_initialized)
-    {
-      //int thrd = kernel().vp_manager.get_thread_id();
-      //if (thrd == 0)
-      //{
-      //  if (initialize_opencl_context())
-      //    return;
-      //}
+  {
+    //int thrd = kernel().vp_manager.get_thread_id();
+    //if (thrd == 0)
+    //{
+      //if (initialize_opencl_context())
+      //  return;
+    //}
 
-      this->total_num_nodes = kernel().node_manager.size();
-      connections.resize(total_num_nodes);
-      is_gpu_initialized = true;
-    }
+    // #pragma omp master
+    // {
+    //   const Token model = kernel().model_manager.get_modeldict()->lookup( "iaf_psc_alpha" );
+    //   model_id = static_cast< index >( model );
+    // }
+
+    this->total_num_nodes = kernel().node_manager.size();
+#if STATIC
+    connections.resize(total_num_nodes);
+#endif
+    is_gpu_initialized = true;
+  }
 }
 
 void
-nest::iaf_psc_alpha_cpu::initialize_nodes(const std::vector< Node* > &nodes) {
+nest::iaf_psc_alpha_cpu::initialize_nodes() {
   const thread t = kernel().vp_manager.get_thread_id();
 
-  const Token model = kernel().model_manager.get_modeldict()->lookup( "iaf_psc_alpha" );
-  const index model_id = static_cast< index >( model );
-  index nodeId = 0;
-  for (std::vector< Node* >::const_iterator node = nodes.begin(); node != nodes.end(); ++node, ++nodeId){
-    if ((*node)->get_model_id() == model_id) {
-      assert(dynamic_cast<nest::iaf_psc_alpha*>(*node) != nullptr);
+  const std::vector< Node* >& nodes = kernel().node_manager.get_nodes_on_thread( t );
 
-      actualNodes.push_back(*node);
+  actualNodes.reserve(nodes.size());
+
+  //const Token model = kernel().model_manager.get_modeldict()->lookup( "iaf_psc_alpha" );
+  //const index model_id = static_cast< index >( model );
+  //assert(model_id == 12);
+
+  for (std::vector< Node* >::const_iterator node = nodes.begin(); node != nodes.end(); ++node){
+    if ((*node)->get_model_id() == model_id) {
+      nest::iaf_psc_alpha* alphaNode = dynamic_cast<nest::iaf_psc_alpha*>(*node);
+      assert(alphaNode != nullptr);
+
+      actualNodes.push_back(alphaNode);
       //cout << "[" << t << "] node("<< (*node)->get_thread() <<","<< (*node)->get_thread_lid() <<") " <<  (*node)->get_gid() << " " << (*node)->get_lid() << endl;
     } else {
       otherNodes.push_back(*node);
@@ -178,22 +195,6 @@ nest::iaf_psc_alpha_cpu::initialize_nodes(const std::vector< Node* > &nodes) {
   // }
 
   cout << "[" << t << "] nodes " << actualNodes.size() << " " << otherNodes.size() << endl;
-}
-
-void
-nest::iaf_psc_alpha_cpu::mass_update(const std::vector< Node* > &nodes, Time const& origin,
-                    const long from,
-                    const long to )
-{
-  mass_update_(nodes, origin, from, to, false );
-}
-
-bool
-nest::iaf_psc_alpha_cpu::mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin,
-                        const long from,
-                        const long to )
-{
-  return mass_update_(nodes, origin, from, to, true );
 }
 
 // int gpuNodeCount = 0;
@@ -229,7 +230,7 @@ nest::iaf_psc_alpha_cpu::mass_wfr_update(const std::vector< Node* > &nodes, Time
 
 // TODO: the for loops will later be kernel calls
 bool
-nest::iaf_psc_alpha_cpu::mass_update_( const std::vector<Node *> &nodes,
+nest::iaf_psc_alpha_cpu::mass_update_(
                       Time const& origin,
                       const long from,
                       const long to,
@@ -245,18 +246,6 @@ nest::iaf_psc_alpha_cpu::mass_update_( const std::vector<Node *> &nodes,
 
   //int count_spike = 0;
   
-  initialize_device();
-  
-  // TODO: for now, I assume that these are the same for all nodes
-
-  if (not is_data_ready)
-  {
-    //copy_data_to_device(nodes);
-    copy_data_to_device(actualNodes);
-    is_data_ready = true;
-  }
-  //copy_data_to_device(actualNodes);
-
   //spikeCount++;
 
   // if (from < to)
@@ -307,7 +296,7 @@ nest::iaf_psc_alpha_cpu::mass_update_( const std::vector<Node *> &nodes,
 
 #ifdef USE_BUFFER
 size_t tid = 0;
-for ( std::vector<Node*>::const_iterator nodeIt = actualNodes.begin(); nodeIt != actualNodes.end(); nodeIt++, tid++ ){
+for ( std::vector<Node*>::const_iterator nodeIt = nodes.begin(); nodeIt != nodes.end(); nodeIt++, tid++ ){
   nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
 #else
   for(size_t tid = 0; tid < this->num_local_nodes - OFFSET; tid++) {
@@ -382,15 +371,14 @@ time_index);
 
     int count_spike = 0;
     int node_id = 0;
-    //for ( std::vector<Node*>::const_iterator nodeIt = nodes.begin(); nodeIt != nodes.end(); nodeIt++, node_id++ )
-    for ( std::vector<Node*>::const_iterator nodeIt = actualNodes.begin(); nodeIt != actualNodes.end(); nodeIt++, node_id++ )
+    for ( std::vector<nest::iaf_psc_alpha*>::const_iterator nodeIt = actualNodes.begin(); nodeIt != actualNodes.end(); nodeIt++, node_id++ )
     {
       //if (node_id >= this->num_local_nodes - OFFSET)
       //{
       //  break;
       //}
 
-      nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
+      nest::iaf_psc_alpha* node = *nodeIt;
       //node->post_gsl(origin, lag);
 
       if (h_spike_count[node_id] > 0)
@@ -542,78 +530,77 @@ time_index);
 // }
 
 void
-nest::iaf_psc_alpha_cpu::initialize_device()
+nest::iaf_psc_alpha_cpu::allocate_nodes()
 {
-  if (!is_initialized)
-    {
-      int thrd_id = kernel().vp_manager.get_thread_id();
-      int len = this->num_local_nodes;
-      //setlocale(LC_NUMERIC, "");
-      printf("[%d] Num of nodes: %ld\n", thrd_id, this->num_local_nodes);
-      //printf("[%d] Double: %'ld Int: %'ld\n", thrd_id, 26 * len * sizeof(double), 3 * len * sizeof(int));
-      
-      h_S__y3_ = new double[len];
-      h_P__Theta_ = new double[len];
-      h_V__P22_ex_ = new double[len];
-      h_V__P21_in_ = new double[len];
-      h_S__dI_ex_ = new double[len];
-      h_P__I_e_ = new double[len];
-      h_V__IPSCInitialValue_ = new double[len];
-      h_V__P31_ex_ = new double[len];
-      h_S__I_in_ = new double[len];
-      h_V__expm1_tau_m_ = new double[len];
-      h_S__r_ = new int[len];
-      h_S__I_ex_ = new double[len];
-      h_V__P21_ex_ = new double[len];
-      h_P__LowerBound_ = new double[len];
-      h_V__P22_in_ = new double[len];
-      h_V__weighted_spikes_ex_ = new double[len];
-      h_V__P11_in_ = new double[len];
-      h_V__weighted_spikes_in_ = new double[len];
-      h_V__P31_in_ = new double[len];
-      h_V__EPSCInitialValue_ = new double[len];
-      h_V__P32_ex_ = new double[len];
-      h_V__P11_ex_ = new double[len];
-      h_S__dI_in_ = new double[len];
-      h_P__V_reset_ = new double[len];
-      h_V__RefractoryCounts_ = new int[len];
-      h_V__P30_ = new double[len];
-      h_V__P32_in_ = new double[len];
-      h_S__y0_ = new double[len];
-      h_spike_count = new unsigned int[len];
+  if (!is_node_initialized) {
+    int thrd_id = kernel().vp_manager.get_thread_id();
+    int len = this->num_local_nodes;
+    //setlocale(LC_NUMERIC, "");
+    printf("[%d] Allocate Num of nodes: %ld\n", thrd_id, this->num_local_nodes);
+    //printf("[%d] Double: %'ld Int: %'ld\n", thrd_id, 26 * len * sizeof(double), 3 * len * sizeof(int));
+    
+    h_S__y3_ = new double[len];
+    h_P__Theta_ = new double[len];
+    h_V__P22_ex_ = new double[len];
+    h_V__P21_in_ = new double[len];
+    h_S__dI_ex_ = new double[len];
+    h_P__I_e_ = new double[len];
+    h_V__IPSCInitialValue_ = new double[len];
+    h_V__P31_ex_ = new double[len];
+    h_S__I_in_ = new double[len];
+    h_V__expm1_tau_m_ = new double[len];
+    h_S__r_ = new int[len];
+    h_S__I_ex_ = new double[len];
+    h_V__P21_ex_ = new double[len];
+    h_P__LowerBound_ = new double[len];
+    h_V__P22_in_ = new double[len];
+    h_V__weighted_spikes_ex_ = new double[len];
+    h_V__P11_in_ = new double[len];
+    h_V__weighted_spikes_in_ = new double[len];
+    h_V__P31_in_ = new double[len];
+    h_V__EPSCInitialValue_ = new double[len];
+    h_V__P32_ex_ = new double[len];
+    h_V__P11_ex_ = new double[len];
+    h_S__dI_in_ = new double[len];
+    h_P__V_reset_ = new double[len];
+    h_V__RefractoryCounts_ = new int[len];
+    h_V__P30_ = new double[len];
+    h_V__P32_in_ = new double[len];
+    h_S__y0_ = new double[len];
+    h_spike_count = new unsigned int[len];
 
-      // create(&gpu_context, &S__y3_, len*sizeof(double));
-      // create(&gpu_context, &P__Theta_, len*sizeof(double));
-      // create(&gpu_context, &V__P22_ex_, len*sizeof(double));
-      // create(&gpu_context, &V__P21_in_, len*sizeof(double));
-      // create(&gpu_context, &S__dI_ex_, len*sizeof(double));
-      // create(&gpu_context, &P__I_e_, len*sizeof(double));
-      // create(&gpu_context, &V__IPSCInitialValue_, len*sizeof(double));
-      // create(&gpu_context, &V__P31_ex_, len*sizeof(double));
-      // create(&gpu_context, &S__I_in_, len*sizeof(double));
-      // create(&gpu_context, &V__expm1_tau_m_, len*sizeof(double));
-      // create(&gpu_context, &S__r_, len*sizeof(int));
-      // create(&gpu_context, &S__I_ex_, len*sizeof(double));
-      // create(&gpu_context, &V__P21_ex_, len*sizeof(double));
-      // create(&gpu_context, &P__LowerBound_, len*sizeof(double));
-      // create(&gpu_context, &V__P22_in_, len*sizeof(double));
-      // create(&gpu_context, &V__weighted_spikes_ex_, len*sizeof(double));
-      // create(&gpu_context, &V__P11_in_, len*sizeof(double));
-      // create(&gpu_context, &V__weighted_spikes_in_, len*sizeof(double));
-      // create(&gpu_context, &V__P31_in_, len*sizeof(double));
-      // create(&gpu_context, &V__EPSCInitialValue_, len*sizeof(double));
-      // create(&gpu_context, &V__P32_ex_, len*sizeof(double));
-      // create(&gpu_context, &V__P11_ex_, len*sizeof(double));
-      // create(&gpu_context, &S__dI_in_, len*sizeof(double));
-      // create(&gpu_context, &P__V_reset_, len*sizeof(double));
-      // create(&gpu_context, &V__RefractoryCounts_, len*sizeof(int));
-      // create(&gpu_context, &V__P30_, len*sizeof(double));
-      // create(&gpu_context, &V__P32_in_, len*sizeof(double));
-      // create(&gpu_context, &S__y0_, len*sizeof(double));
-      // create(&gpu_context, &d_spike_count, len*sizeof(unsigned int));
+    // create(&gpu_context, &S__y3_, len*sizeof(double));
+    // create(&gpu_context, &P__Theta_, len*sizeof(double));
+    // create(&gpu_context, &V__P22_ex_, len*sizeof(double));
+    // create(&gpu_context, &V__P21_in_, len*sizeof(double));
+    // create(&gpu_context, &S__dI_ex_, len*sizeof(double));
+    // create(&gpu_context, &P__I_e_, len*sizeof(double));
+    // create(&gpu_context, &V__IPSCInitialValue_, len*sizeof(double));
+    // create(&gpu_context, &V__P31_ex_, len*sizeof(double));
+    // create(&gpu_context, &S__I_in_, len*sizeof(double));
+    // create(&gpu_context, &V__expm1_tau_m_, len*sizeof(double));
+    // create(&gpu_context, &S__r_, len*sizeof(int));
+    // create(&gpu_context, &S__I_ex_, len*sizeof(double));
+    // create(&gpu_context, &V__P21_ex_, len*sizeof(double));
+    // create(&gpu_context, &P__LowerBound_, len*sizeof(double));
+    // create(&gpu_context, &V__P22_in_, len*sizeof(double));
+    // create(&gpu_context, &V__weighted_spikes_ex_, len*sizeof(double));
+    // create(&gpu_context, &V__P11_in_, len*sizeof(double));
+    // create(&gpu_context, &V__weighted_spikes_in_, len*sizeof(double));
+    // create(&gpu_context, &V__P31_in_, len*sizeof(double));
+    // create(&gpu_context, &V__EPSCInitialValue_, len*sizeof(double));
+    // create(&gpu_context, &V__P32_ex_, len*sizeof(double));
+    // create(&gpu_context, &V__P11_ex_, len*sizeof(double));
+    // create(&gpu_context, &S__dI_in_, len*sizeof(double));
+    // create(&gpu_context, &P__V_reset_, len*sizeof(double));
+    // create(&gpu_context, &V__RefractoryCounts_, len*sizeof(int));
+    // create(&gpu_context, &V__P30_, len*sizeof(double));
+    // create(&gpu_context, &V__P32_in_, len*sizeof(double));
+    // create(&gpu_context, &S__y0_, len*sizeof(double));
+    // create(&gpu_context, &d_spike_count, len*sizeof(unsigned int));
 
-      is_initialized = true;
-    }
+    is_node_initialized = true;
+  }
 }
 
 #define UPLOAD_2D_DATA(buf, src)        \
@@ -702,10 +689,10 @@ void
 nest::iaf_psc_alpha_cpu::copy_spike_to_device(const long lag)
 {
   size_t ind = num_local_nodes * ((time_index + lag) % event_size);
-  std::vector<Node *>::const_iterator nodeIt = actualNodes.begin();
+  std::vector<nest::iaf_psc_alpha *>::const_iterator nodeIt = actualNodes.begin();
   for (; nodeIt != actualNodes.end(); nodeIt++, ind++ )
   {
-    nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
+    nest::iaf_psc_alpha* node = *nodeIt;
 
     h_ex_spikes_[ind] = node->B_.ex_spikes_.read_value(lag);
     h_in_spikes_[ind] = node->B_.in_spikes_.read_value(lag);
@@ -735,15 +722,15 @@ nest::iaf_psc_alpha_cpu::copy_spike_from_device()
 }
 
 void
-nest::iaf_psc_alpha_cpu::copy_data_to_device(const std::vector< Node* > &nodes)
+nest::iaf_psc_alpha_cpu::copy_data_to_device(const std::vector< nest::iaf_psc_alpha* > &nodes)
 {
   int num_nodes = nodes.size();
 
-  std::vector<Node *>::const_iterator nodeIt = nodes.begin();
+  std::vector<nest::iaf_psc_alpha *>::const_iterator nodeIt = nodes.begin();
 
   for (int i = 0; nodeIt != nodes.end(); nodeIt++, i++ )
   {
-    nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
+    nest::iaf_psc_alpha* node = *nodeIt;
 
 UPLOAD_1D_DATA(h_S__y3_, S_.y3_);
 UPLOAD_1D_DATA(h_P__Theta_, P_.Theta_);
@@ -834,7 +821,7 @@ UPLOAD_1D_DATA(h_S__y0_, S_.y0_);
   node->dst = buf[i];                            
 
 void
-nest::iaf_psc_alpha_cpu::copy_data_from_device(const std::vector< Node* > &nodes, bool last_copy)
+nest::iaf_psc_alpha_cpu::copy_data_from_device(const std::vector< nest::iaf_psc_alpha* > &nodes, bool last_copy)
 {
 //  int num_nodes = nodes.size();
 
@@ -862,11 +849,11 @@ nest::iaf_psc_alpha_cpu::copy_data_from_device(const std::vector< Node* > &nodes
 
 
   int num_nodes = nodes.size();
-  std::vector<Node *>::const_iterator nodeIt = nodes.begin();
+  std::vector<nest::iaf_psc_alpha *>::const_iterator nodeIt = nodes.begin();
 
   for (int i = 0; nodeIt != nodes.end(); nodeIt++, i++ )
   {
-    nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*nodeIt;
+    nest::iaf_psc_alpha* node = *nodeIt;
 
 DOWNLOAD_1D_DATA(h_S__y3_, S_.y3_);
 DOWNLOAD_1D_DATA(h_P__Theta_, P_.Theta_);
@@ -1187,7 +1174,7 @@ nest::iaf_psc_alpha_cpu::fill_event_buffer( SecondaryEvent& e)
 
 
 void
-nest::iaf_psc_alpha_cpu::initialize()
+nest::iaf_psc_alpha_cpu::initialize_ring_buffers()
 {
   thread thrd_id = kernel().vp_manager.get_thread_id();
 
@@ -1245,7 +1232,13 @@ nest::iaf_psc_alpha_cpu::initialize()
 
     is_ring_buffer_ready = true;
   }
+}
 
+
+void
+nest::iaf_psc_alpha_cpu::initialize_connections()
+{
+#ifdef STATIC
   for (vector<vector<connection_info> >::iterator tgt_it = connections.begin();
        tgt_it != connections.end();
        tgt_it++)
@@ -1302,10 +1295,31 @@ nest::iaf_psc_alpha_cpu::initialize()
 
   //getKernel("update", "deliver_events_stdp_pl", "deliver_events", &gpu_context);
 
-  //MOD
   //delete[] h_connections_ptr; h_connections_ptr = NULL;
   //delete[] h_connections; h_connections = NULL;
   //delete[] h_connections_weight; h_connections_weight = NULL;
+#endif
+}
+
+// Must be called after initialize_nodes
+void
+nest::iaf_psc_alpha_cpu::initialize()
+{
+  if (!init_device) {
+    //if (initialize_command_queue())
+    //  return;
+
+    //getKernel("update", "deliver_events_stdp_pl", "deliver_events", &gpu_context);
+    initialize_ring_buffers();
+#ifdef STATIC
+    initialize_connections();
+#endif
+
+    allocate_nodes();
+    copy_data_to_device(actualNodes);
+
+    init_device = true;
+  }
 }
 
 void
@@ -1346,6 +1360,10 @@ nest::iaf_psc_alpha_cpu::deliver_events()
   //printf("[%d] Deliver Events - Batch Size: %d\n", thrd_id, batch_size);
   if (batch_size != 0)
   {
+    if (batch_size > max_num_spikes) {
+      max_num_spikes = batch_size;
+    }
+
 #ifdef PROFILING_SIZE
     #pragma omp critical
     printf("{P} Normal Batch: %d\n", batch_size);
@@ -1571,6 +1589,7 @@ kernel_deliver_events_stdp_pl(
 void
 nest::iaf_psc_alpha_cpu::deliver_static_events()
 {
+#ifdef STATIC
   thread thrd_id = kernel().vp_manager.get_thread_id();
 
   size_t static_batch_size = list_sgid.size();
@@ -1636,6 +1655,7 @@ nest::iaf_psc_alpha_cpu::deliver_static_events()
     delete[] h_spike_pos;
     list_sgid.clear();
   }
+#endif
 }
 
 void
@@ -1646,10 +1666,12 @@ nest::iaf_psc_alpha_cpu::copy_event_data(std::vector<Node *> nodes)
 void
 nest::iaf_psc_alpha_cpu::handle(index sgid, index tgid, double weight_)
 {
+#ifdef STATIC
   connection_info info;
   info.tgt_id = tgid;
   info.weight = weight_;
   connections[sgid].push_back(info);
+#endif
 }
 
 void nest::iaf_psc_alpha_cpu::handle( SpikeEvent& e )
@@ -1659,12 +1681,7 @@ void nest::iaf_psc_alpha_cpu::handle( CurrentEvent& e )
 
 void nest::iaf_psc_alpha_cpu::pre_deliver_event()
 {
-  this->pre_deliver_event(actualNodes);
-}
-
-void nest::iaf_psc_alpha_cpu::pre_deliver_event(const std::vector< Node* > &nodes)
-{
-  size_t len = nodes.size();
+  size_t len = actualNodes.size();
   
   // if (h_history_ptr == NULL)
   //   {
@@ -1698,14 +1715,13 @@ void nest::iaf_psc_alpha_cpu::pre_deliver_event(const std::vector< Node* > &node
   
   int nodeid = 0;
 
-  for (std::vector< Node* >::const_iterator it = nodes.begin(); it != nodes.end(); it++, nodeid++)
+  for (std::vector< nest::iaf_psc_alpha* >::const_iterator it = actualNodes.begin(); it != actualNodes.end(); it++, nodeid++)
   {
     //if (nodeid >= this->num_local_nodes - OFFSET)
     //  break;
 
-    nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*it;
-    //nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)nodes.at(nodeid);
-    
+    nest::iaf_psc_alpha* node = *it;
+
     h_history_ptr[nodeid] = nodes_history.size();
     //history_size = nodes_history.size();
     hist_queue &h_ = node->get_all_history();
@@ -1760,11 +1776,6 @@ void nest::iaf_psc_alpha_cpu::pre_deliver_event(const std::vector< Node* > &node
 
 void nest::iaf_psc_alpha_cpu::post_deliver_event()
 {
-  this->post_deliver_event(actualNodes);
-}
-
-void nest::iaf_psc_alpha_cpu::post_deliver_event(const std::vector< Node* > &nodes)
-{
   typedef std::deque< histentry > hist_queue;
   //download(&gpu_context, d_history_access_counter_, (void*)h_history_access_counter_, history_size * sizeof(int));
 
@@ -1772,13 +1783,14 @@ void nest::iaf_psc_alpha_cpu::post_deliver_event(const std::vector< Node* > &nod
   
   int index = 0;
   int nodeid = 0;
-  for (std::vector< Node* >::const_iterator it = nodes.begin(); it != nodes.end();
+  for (std::vector< nest::iaf_psc_alpha* >::const_iterator it = actualNodes.begin(); it != actualNodes.end();
        it++, nodeid++)
   {
     //if (nodeid >= this->num_local_nodes - OFFSET)
     //  break;
 
-    nest::iaf_psc_alpha* node = (nest::iaf_psc_alpha*)*it;
+    nest::iaf_psc_alpha* node = *it;
+
     hist_queue h_ = node->get_all_history();
     for (hist_queue::iterator h_it = h_.begin(); h_it != h_.end(); h_it++, index++)
     {
@@ -1869,7 +1881,9 @@ void nest::iaf_psc_alpha_cpu::insert_static_event(SpikeEvent& e)
   conn_info.multiplicity = e.get_multiplicity();
   conn_info.type = 1;
   list_spikes.push_back(conn_info);*/
+#ifdef STATIC
   list_sgid.push_back(e);
+#endif
 }
 
 // iaf_psc_alpha::handle(SpikeEvent& e)

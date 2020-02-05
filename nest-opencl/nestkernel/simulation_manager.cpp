@@ -100,7 +100,8 @@ nest::SimulationManager::finalize()
   from_step_ = 0;
   to_step_ = 0; // consistent with to_do_ = 0
 
-  //delete[] this->spikes;
+  cout << "Clean up GPU execution" << endl;
+  gpu_execution.clear();
 }
 
 void
@@ -369,9 +370,6 @@ nest::SimulationManager::set_status( const DictionaryDatum& d )
   }
 
   this->num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
-  
-  //const size_t numThreads = kernel().vp_manager.get_num_threads();
-  //this->spikes = new long[numThreads];
 }
 
 void
@@ -456,6 +454,7 @@ nest::SimulationManager::prepare()
 
   if (this->num_gpu_threads > 0 && gpu_execution.empty())
   {
+    cout << "Creating GPU Execution" << endl;
     gpu_execution.resize(this->num_gpu_threads);
     for (int i = 0; i < this->num_gpu_threads; i++)
       gpu_execution[i] = new GPUEXEC;
@@ -633,6 +632,12 @@ nest::SimulationManager::call_update_()
      << "GPU Processing Static";
 #endif
 
+#ifdef GPU
+  os << std::endl << "GPU Kernel";
+#else
+  os << std::endl << "CPU Kernel";
+#endif
+
   cout << "Min Delay " << kernel().connection_manager.get_min_delay() << endl;
   cout << "Max Delay " << kernel().connection_manager.get_max_delay() << endl;
 
@@ -730,20 +735,24 @@ nest::SimulationManager::update_()
 
     if (isGPU && not gpu_exc->init_device)
     {
-      PROFILING_START();
+      #pragma omp critical
+      {
+        PROFILING_START();
 
-      //gpu_exc->total_num_nodes = kernel().node_manager.size();
-      gpu_exc->initialize_nodes(thread_local_nodes);
-      //gpu_exc->num_local_nodes = thread_local_nodes.size();
+        //gpu_exc->total_num_nodes = kernel().node_manager.size();
+        gpu_exc->initialize_nodes();
+        //gpu_exc->num_local_nodes = thread_local_nodes.size();
 
-      cout << "[" << thrd << "] init_device" << endl;
+        cout << "[" << thrd << "] init_device" << endl;
 #ifdef STATIC
-      kernel().event_delivery_manager.deliver_build_graph_events( thrd );
+        kernel().event_delivery_manager.deliver_build_graph_events( thrd );
 #endif
-      gpu_exc->initialize();
-      cout << "[" << thrd << "] done" << endl;
+        
+        gpu_exc->initialize();
+        cout << "[" << thrd << "] done" << endl;
 
-      PROFILING_END_T("Initialize");
+        PROFILING_END_T("Initialize");
+      }
     }
 
     do {
