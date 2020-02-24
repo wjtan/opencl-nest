@@ -37,6 +37,8 @@
 // Includes from sli:
 #include "dictutils.h"
 
+#define STATIC
+
 //#define PROFILING
 #include "profile.h"
 
@@ -563,6 +565,7 @@ EventDeliveryManager::deliver_events( thread t )
             PROFILING_START();
           }
 
+          //std::cout << "Spike," << prepared_timestamps[ lag ].get_ms() << "," << nid << std::endl;
           kernel().connection_manager.send( t, nid, se );
 
 #ifdef STATIC
@@ -636,7 +639,7 @@ EventDeliveryManager::deliver_events( thread t )
       read_from_comm_buffer( done_p, readpos );
       done = done && done_p;
     }
-  }/*
+  }
   else // off grid spiking
   {
     // prepare Time objects for every possible time stamp within min_delay_
@@ -679,7 +682,7 @@ EventDeliveryManager::deliver_events( thread t )
       }
       pos[ pid ] = pos_pid;
     }
-  }*/
+  }
   return done;
 }
 

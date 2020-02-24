@@ -40,6 +40,7 @@
 #include "psignal.h"
 
 #define GPU
+#define STATIC
 
 #ifdef GPU
   #include "../models/iaf_psc_alpha_gpu.h"
@@ -737,7 +738,7 @@ nest::SimulationManager::update_()
       //#pragma omp critical
       {
         try {
-          PROFILING_START();
+          //PROFILING_START();
 
           //gpu_exc->total_num_nodes = kernel().node_manager.size();
           gpu_exc->initialize_nodes();
@@ -751,7 +752,7 @@ nest::SimulationManager::update_()
           gpu_exc->initialize();
           cout << "[" << thrd << "] done" << endl;
 
-          PROFILING_END_T("Initialize");
+          //PROFILING_END_T("Initialize");
         } catch ( std::exception& e ) {
           // so throw the exception after parallel region
           exceptions_raised.at( thrd ) =
@@ -767,30 +768,31 @@ nest::SimulationManager::update_()
       
       if ( from_step_ == 0 ) // deliver only at beginning of slice
       {
+        PROFILING_START();
         if (isGPU)
         {
-            gpu_exc->update_type = 1;
+          gpu_exc->update_type = 1;
 
           try {
-            PROFILING_START();
+            //PROFILING_START();
 
             gpu_exc->clear_buffer();
             //gpu_exc->pre_deliver_event(thread_local_nodes);
             gpu_exc->pre_deliver_event();
       
-            PROFILING_END_T("Pre Deliver events");
+            //PROFILING_END_T("Pre Deliver events");
             //gpu_exc->insert_events();
-            PROFILING_START();
+            //PROFILING_START();
             kernel().event_delivery_manager.deliver_events( thrd );
-            PROFILING_END_T("GPU Deliver events");
+            //PROFILING_END_T("GPU Deliver events");
 
             //#pragma omp critical
             //printf("[%d] Deliver Events - batchSize: %ld\n", thrd, kernel().event_delivery_manager.totalBatchSize);
 
-            PROFILING_START();
+            //PROFILING_START();
             //gpu_exc->post_deliver_event(thread_local_nodes);
             gpu_exc->post_deliver_event();
-            PROFILING_END_T("Post Deliver events");
+            //PROFILING_END_T("Post Deliver events");
 
 #ifdef STATIC
             PROFILING_START();
@@ -803,148 +805,152 @@ nest::SimulationManager::update_()
               lockPTR< WrappedThreadException >( new WrappedThreadException( e ) );
           }
         } else {
-          PROFILING_START();
+          //PROFILING_START();
           kernel().event_delivery_manager.deliver_events( thrd );
-          PROFILING_END_T("CPU Deliver events");
+          //PROFILING_END_T("CPU Deliver events");
         }
       }
+      #pragma omp critical
+      {
+        PROFILING_END_T("Deliver events");
+      }
 
-      // // preliminary update of nodes that use waveform relaxtion
-      // if ( kernel().node_manager.wfr_is_used() )
-      // {
-      //   std::cout << "doing wfr update" << std::endl;
-      //   // std::cout << "another go" << std::endl;
-      //   #pragma omp single
-      //   {
-      //     // if the end of the simulation is in the middle
-      //     // of a min_delay_ step, we need to make a complete
-      //     // step in the wfr_update and only do
-      //     // the partial step in the final update
-      //     // needs to be done in omp single since to_step_ is a scheduler
-      //     // variable
-      //     old_to_step = to_step_;
-      //     if ( to_step_ < kernel().connection_manager.get_min_delay() )
-      //     {
-      //       to_step_ = kernel().connection_manager.get_min_delay();
-      //     }
-      //   }
+      // preliminary update of nodes that use waveform relaxtion
+      if ( kernel().node_manager.wfr_is_used() )
+      {
+        std::cout << "doing wfr update" << std::endl;
+        // std::cout << "another go" << std::endl;
+        #pragma omp single
+        {
+          // if the end of the simulation is in the middle
+          // of a min_delay_ step, we need to make a complete
+          // step in the wfr_update and only do
+          // the partial step in the final update
+          // needs to be done in omp single since to_step_ is a scheduler
+          // variable
+          old_to_step = to_step_;
+          if ( to_step_ < kernel().connection_manager.get_min_delay() )
+          {
+            to_step_ = kernel().connection_manager.get_min_delay();
+          }
+        }
 
-      //   bool max_iterations_reached = true;
-      //   const std::vector< Node* >& thread_local_wfr_nodes =
-      //     kernel().node_manager.get_wfr_nodes_on_thread( thrd );
+        bool max_iterations_reached = true;
+        const std::vector< Node* >& thread_local_wfr_nodes =
+          kernel().node_manager.get_wfr_nodes_on_thread( thrd );
 
-      //   std::cout << "thread_local_wfr_nodes " << thread_local_wfr_nodes.size() << std::endl;
-      //   for ( long n = 0; n < wfr_max_iterations_; ++n )
-      //   {
-      //     bool done_p = true;
+        std::cout << "thread_local_wfr_nodes " << thread_local_wfr_nodes.size() << std::endl;
+        for ( long n = 0; n < wfr_max_iterations_; ++n )
+        {
+          bool done_p = true;
 
-      //     if (isGPU)
-      //     {
-      //       PROFILING_START();
-      //       done_p = gpu_exc->mass_wfr_update (thread_local_wfr_nodes, clock_, from_step_, to_step_);
-      //       PROFILING_END_T("Mass wfr update");
-      //     }
-      //     else
-      //     {
-      //       PROFILING_START();
-      //       for ( std::vector< Node* >::const_iterator i =
-      //             thread_local_wfr_nodes.begin();
-      //             i != thread_local_wfr_nodes.end();
-      //             ++i )
-      //       {
-      //         done_p = wfr_update_( *i ) && done_p;
-      //       }
-      //       PROFILING_END_T("Mass wfr update");
-      //     }
+          if (isGPU)
+          {
+            PROFILING_START();
+            done_p = gpu_exc->mass_wfr_update (thread_local_wfr_nodes, clock_, from_step_, to_step_);
+            PROFILING_END_T("Mass wfr update");
+          }
+          else
+          {
+            PROFILING_START();
+            for ( std::vector< Node* >::const_iterator i =
+                  thread_local_wfr_nodes.begin();
+                  i != thread_local_wfr_nodes.end();
+                  ++i )
+            {
+              done_p = wfr_update_( *i ) && done_p;
+            }
+            PROFILING_END_T("Mass wfr update");
+          }
       
-      //     // this loop may be empty for those threads
-      //     // that do not have any nodes requiring wfr_update
-      //     //for ( std::vector< Node* >::const_iterator i =
-      //     //        thread_local_wfr_nodes.begin();
-      //     //      i != thread_local_wfr_nodes.end();
-      //     //      ++i )
-      //     //  {
+          // this loop may be empty for those threads
+          // that do not have any nodes requiring wfr_update
+          //for ( std::vector< Node* >::const_iterator i =
+          //        thread_local_wfr_nodes.begin();
+          //      i != thread_local_wfr_nodes.end();
+          //      ++i )
+          //  {
 
-      //     //    
-      //     //    done_p = wfr_update_( *i ) && done_p;
-      //     //    
-      //     //    // printf("after updating the %dth wfr node, done is %d\n", i - thread_local_wfr_nodes.begin(), done_p);
-      //     //  }
+          //    
+          //    done_p = wfr_update_( *i ) && done_p;
+          //    
+          //    // printf("after updating the %dth wfr node, done is %d\n", i - thread_local_wfr_nodes.begin(), done_p);
+          //  }
 
-      //     // printf("done: %d\n", done_p);
-      //     // exit(1);
+          // printf("done: %d\n", done_p);
+          // exit(1);
 
-      //     // add done value of thread p to done vector
-      //     #pragma omp critical
-      //     done.push_back( done_p );
+          // add done value of thread p to done vector
+          #pragma omp critical
+          done.push_back( done_p );
 
-      //     /*******************************************************************************/
-      //     // parallel section ends, wait until all threads are done -> synchronize
-      //     #pragma omp barrier
+          /*******************************************************************************/
+          // parallel section ends, wait until all threads are done -> synchronize
+          #pragma omp barrier
 
-      //     // the following block is executed by a single thread
-      //     // the other threads wait at the end of the block
-      //     #pragma omp single
-      //     {
-      //       // set done_all
-      //       for ( size_t i = 0; i < done.size(); i++ )
-      //       {
-      //         done_all = done[ i ] && done_all;
-      //       }
+          // the following block is executed by a single thread
+          // the other threads wait at the end of the block
+          #pragma omp single
+          {
+            // set done_all
+            for ( size_t i = 0; i < done.size(); i++ )
+            {
+              done_all = done[ i ] && done_all;
+            }
         
-      //       // gather SecondaryEvents (e.g. GapJunctionEvents)
-      //       kernel().event_delivery_manager.gather_events( done_all );
+            // gather SecondaryEvents (e.g. GapJunctionEvents)
+            kernel().event_delivery_manager.gather_events( done_all );
 
-      //       // reset done and done_all
-      //       //(needs to be in the single threaded part)
-      //       done_all = true;
-      //       done.clear();
-      //     }
+            // reset done and done_all
+            //(needs to be in the single threaded part)
+            done_all = true;
+            done.clear();
+          }
 
-      //     // deliver SecondaryEvents generated during wfr_update
-      //     // returns the done value over all threads
+          // deliver SecondaryEvents generated during wfr_update
+          // returns the done value over all threads
 
-      //     if (isGPU)
-      //     {
-      //       PROFILING_START();
-      //       gpu_exc->clear_buffer();
-      //       gpu_exc->pre_deliver_event(thread_local_wfr_nodes);
-      //     }
+          if (isGPU)
+          {
+            PROFILING_START();
+            gpu_exc->clear_buffer();
+            gpu_exc->pre_deliver_event(thread_local_wfr_nodes);
+          }
       
-      //     done_p = kernel().event_delivery_manager.deliver_events( thrd );
+          done_p = kernel().event_delivery_manager.deliver_events( thrd );
 
-      //     if (isGPU)
-      //     {
-      //       // //printf("built_connections: %d\n", hh_psc_alpha_gap::built_connections);
+          if (isGPU)
+          {
+            // //printf("built_connections: %d\n", hh_psc_alpha_gap::built_connections);
       
-      //       gpu_exc->post_deliver_event(thread_local_wfr_nodes);
+            gpu_exc->post_deliver_event(thread_local_wfr_nodes);
       
-      //       //gpu_exc->copy_event_data(thread_local_wfr_nodes);
-      //       PROFILING_END_T("Deliver events");
-      //     }
+            //gpu_exc->copy_event_data(thread_local_wfr_nodes);
+            PROFILING_END_T("Deliver events");
+          }
       
-      //     if ( done_p )
-      //     {
-      //       max_iterations_reached = false;
-      //       break;
-      //     }
-      //   } // of for (wfr_max_iterations) ...
+          if ( done_p )
+          {
+            max_iterations_reached = false;
+            break;
+          }
+        } // of for (wfr_max_iterations) ...
 
-      //   #pragma omp single
-      //   {
-      //     to_step_ = old_to_step;
-      //     if ( max_iterations_reached )
-      //     {
-      //       std::string msg = String::compose(
-      //         "Maximum number of iterations reached at interval %1-%2 ms",
-      //         clock_.get_ms(),
-      //         clock_.get_ms() + to_step_ * Time::get_resolution().get_ms() );
-      //       LOG( M_WARNING, "SimulationManager::wfr_update", msg );
-      //     }
-      //   }
+        #pragma omp single
+        {
+          to_step_ = old_to_step;
+          if ( max_iterations_reached )
+          {
+            std::string msg = String::compose(
+              "Maximum number of iterations reached at interval %1-%2 ms",
+              clock_.get_ms(),
+              clock_.get_ms() + to_step_ * Time::get_resolution().get_ms() );
+            LOG( M_WARNING, "SimulationManager::wfr_update", msg );
+          }
+        }
 
-      // } // of if(wfr_is_used)
-      // // end of preliminary update
+      } // of if(wfr_is_used)
+      // end of preliminary update
     
 
       //const std::vector< Node* >& thread_local_nodes =
@@ -952,6 +958,7 @@ nest::SimulationManager::update_()
 
       gettimeofday( &t_slice_begin_, NULL );
 
+      PROFILING_START();
       if (isGPU)
       {
         gpu_exc->update_type = 2;
@@ -962,23 +969,27 @@ nest::SimulationManager::update_()
           //update_nodes_gpu(gpu_exc, thread_local_nodes);
           //PROFILING_END_T("Gpu Update Nodes");
 
-          PROFILING_START();
+          //PROFILING_START();
           //gpu_exc->mass_update(gpu_exc->updated_nodes, clock_, from_step_, to_step_ );
           gpu_exc->mass_update(clock_, from_step_, to_step_ );
-          PROFILING_END_T("Mass Update Nodes");
+          //PROFILING_END_T("Mass Update Nodes");
 
-          PROFILING_START();
+          //PROFILING_START();
           gpu_exc->deliver_events();
-          PROFILING_END_T("Spike deliver");
+          //PROFILING_END_T("Spike deliver");
         } catch ( std::exception& e ) {
           // so throw the exception after parallel region
           exceptions_raised.at( thrd ) =
             lockPTR< WrappedThreadException >( new WrappedThreadException( e ) );
         }
       } else {
-        PROFILING_START();
+        //PROFILING_START();
         update_nodes(thread_local_nodes);
-        PROFILING_END_T("CPU Update Nodes");
+        //PROFILING_END_T("CPU Update Nodes");
+      }
+      #pragma omp critical
+      {
+        PROFILING_END_T("Update Nodes");
       }
 
       gettimeofday( &t_slice_end_, NULL );

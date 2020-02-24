@@ -364,13 +364,15 @@ nest::iaf_psc_alpha_gpu::initialize_command_queue()
 {
   const int num_gpus = kernel().vp_manager.get_num_gpus();
   const int thrd_id = kernel().vp_manager.get_thread_id();
-  const int vp_id = kernel().vp_manager.thread_to_vp(thrd_id);
+  //const int vp_id = kernel().vp_manager.thread_to_vp(thrd_id);
+
+  const int selectedDevice = thrd_id % num_gpus;
 
   try
   {
-    //printf("[%d] Num of Devices: %d\n", thrd_id, num_devices);
+    printf("[%d] Num of Devices: %d, Selected: %d\n", thrd_id, num_gpus, selectedDevice);
 
-    this->command_queue = cl::CommandQueue(context, gpu_context.list_device[vp_id % num_gpus]);
+    this->command_queue = cl::CommandQueue(context, gpu_context.list_device[selectedDevice]);
   }
   catch (const cl::Error &err) {
     #pragma omp critical

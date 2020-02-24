@@ -38,7 +38,7 @@ namespace nest
     void initialize_gpu();
     void initialize_nodes();
 
-    bool mass_wfr_update(Time const& origin, const long from, const long to ) { mass_update_(origin, from, to, true ); }
+    bool mass_wfr_update(Time const& origin, const long from, const long to ) { return mass_update_(origin, from, to, true ); }
     void mass_update(Time const& origin, const long from, const long to ) { mass_update_(origin, from, to, false ); }
 
     bool mass_wfr_update(const std::vector< Node* > &nodes, Time const& origin, const long from, const long to ) { return mass_wfr_update(origin, from, to); }

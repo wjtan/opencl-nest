@@ -46,8 +46,6 @@
 #include "dictutils.h"
 #include <stdio.h>
 
-//#define LOAD_BALANCE
-
 namespace nest
 {
 
@@ -203,6 +201,8 @@ index NodeManager::add_node( index mod, long n ) // no_p
     throw BadProperty();
   }
 
+  std::cout << "Add Node (" << mod << ") " << n << std::endl;
+
   const thread n_threads = kernel().vp_manager.get_num_threads();
   assert( n_threads > 0 );
 
@@ -244,7 +244,25 @@ index NodeManager::add_node( index mod, long n ) // no_p
   {
     // In this branch we create nodes for global receivers
     const int n_per_process = n / kernel().mpi_manager.get_num_rec_processes();
-    const int n_per_thread = n_per_process / n_threads + 1;
+    //const int n_per_thread = n_per_process / n_threads + 1;
+
+    int total_threads = kernel().vp_manager.get_num_threads();
+    int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
+    int num_cpu_threads = total_threads - num_gpu_threads;
+
+    int gpu_bucket = num_gpu_threads * nodes_per_gpu_thread;
+    int cpu_bucket = num_cpu_threads * nodes_per_cpu_thread;
+    int bucket = gpu_bucket + cpu_bucket;
+
+    int n_per_gpu = ceil(n_per_process * gpu_bucket / bucket);
+    int n_per_cpu = ceil(n_per_process * cpu_bucket / bucket);
+
+    //printf("total_threads: %d\n", total_threads);
+    //printf("num_gpu_threads: %d\n", num_gpu_threads);
+    //printf("num_cpu_threads: %d\n", num_cpu_threads);
+    printf("Nodes per gpu: %d\n", n_per_gpu);
+    printf("Nodes per cpu: %d\n", n_per_cpu);
+    //printf("bucket: %d\n", bucket);
 
     // We only need to reserve memory on the ranks on which we
     // actually create nodes. In this if-branch ---> Only on recording
@@ -257,45 +275,29 @@ index NodeManager::add_node( index mod, long n ) // no_p
       for ( thread t = 0; t < n_threads; ++t )
       {
         // Model::reserve() reserves memory for n ADDITIONAL nodes on thread t
-        model->reserve_additional( t, n_per_thread );
+        //model->reserve_additional( t, n_per_thread );
+
+        if (t < num_gpu_threads) {
+          model->reserve_additional( t, n_per_gpu );
+        } else {
+          model->reserve_additional( t, n_per_cpu );
+        }
       }
     }
 
-#ifdef LOAD_BALANCE
-    int total_threads = kernel().vp_manager.get_num_threads();
-    int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
-    int num_cpu_threads = total_threads - num_gpu_threads;
-
-    int num_gpu_nodes = num_gpu_threads * nodes_per_gpu_thread;
-    int num_cpu_nodes = num_cpu_threads * nodes_per_cpu_thread;
-    int bucket = num_gpu_nodes + num_cpu_nodes;
-    
-    //printf("total_threads: %d\n", total_threads);
-    //printf("num_gpu_threads: %d\n", num_gpu_threads);
-    //printf("num_cpu_threads: %d\n", num_cpu_threads);
-    printf("1) num_gpu_nodes: %d\n", num_gpu_nodes);
-    printf("1) num_cpu_nodes: %d\n", num_cpu_nodes);
-    //printf("bucket: %d\n", bucket);
-#endif
-
     for ( size_t gid = min_gid; gid < max_gid; ++gid )
     {
-      const thread vp = kernel().vp_manager.suggest_rec_vp( get_n_gsd() );
-      const thread t = kernel().vp_manager.vp_to_thread( vp );
+      //const thread vp = kernel().vp_manager.suggest_rec_vp( get_n_gsd() );
+      thread vp;
+      int k = gid % bucket;
+      if (k < gpu_bucket)
+          vp = gid % num_gpu_threads;
+      else
+          vp = gid % num_cpu_threads + num_gpu_threads;
 
+      const thread _thread = kernel().vp_manager.vp_to_thread( vp );
       if ( kernel().vp_manager.is_local_vp( vp ) )
       {
-        int _thread = t;
-#ifdef LOAD_BALANCE
-        int k = gid % bucket;
-        if (k < num_gpu_nodes)
-          _thread = gid % num_gpu_threads;
-        else
-          _thread = gid % num_cpu_threads + num_gpu_threads;
-
-        //printf("gid: %d t: %d k: %d _thread: %d\n", gid, t, k, _thread);
-#endif
-
         Node* newnode = model->allocate( _thread );
         newnode->set_gid_( gid );
         newnode->set_model_id( mod );
@@ -321,7 +323,25 @@ index NodeManager::add_node( index mod, long n ) // no_p
   {
     // In this branch we create nodes for all GIDs which are on a local thread
     const int n_per_process = n / kernel().mpi_manager.get_num_sim_processes();
-    const int n_per_thread = n_per_process / n_threads + 1;
+    //const int n_per_thread = n_per_process / n_threads + 1;
+
+    int total_threads = kernel().vp_manager.get_num_threads();
+    int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
+    int num_cpu_threads = total_threads - num_gpu_threads;
+
+    int gpu_bucket = num_gpu_threads * nodes_per_gpu_thread;
+    int cpu_bucket = num_cpu_threads * nodes_per_cpu_thread;
+    int bucket = gpu_bucket + cpu_bucket;
+
+    int n_per_gpu = ceil(n_per_process * gpu_bucket / bucket);
+    int n_per_cpu = ceil(n_per_process * cpu_bucket / bucket);
+
+    //printf("total_threads: %d\n", total_threads);
+    //printf("num_gpu_threads: %d\n", num_gpu_threads);
+    //printf("num_cpu_threads: %d\n", num_cpu_threads);
+    printf("Nodes per gpu: %d\n", n_per_gpu);
+    printf("Nodes per cpu: %d\n", n_per_cpu);
+    //printf("bucket: %d\n", bucket);
 
     // We only need to reserve memory on the ranks on which we
     // actually create nodes. In this if-branch ---> Only on
@@ -338,7 +358,13 @@ index NodeManager::add_node( index mod, long n ) // no_p
       {
         // Model::reserve() reserves memory for n ADDITIONAL nodes on thread t
         // reserves at least one entry on each thread, nobody knows why
-        model->reserve_additional( t, n_per_thread );
+        //model->reserve_additional( t, n_per_thread );
+
+        if (t < num_gpu_threads) {
+          model->reserve_additional( t, n_per_gpu );
+        } else {
+          model->reserve_additional( t, n_per_cpu );
+        }
       }
     }
 
@@ -361,44 +387,22 @@ index NodeManager::add_node( index mod, long n ) // no_p
     // become irrelevant.
     current_->add_gid_range( min_gid, max_gid - 1 );
 
-#ifdef LOAD_BALANCE
-    int total_threads = kernel().vp_manager.get_num_threads();
-    int num_gpu_threads = kernel().vp_manager.get_num_gpu_threads();
-    int num_cpu_threads = total_threads - num_gpu_threads;
-
-    int num_gpu_nodes = num_gpu_threads * nodes_per_gpu_thread;
-    int num_cpu_nodes = num_cpu_threads * nodes_per_cpu_thread;
-    int bucket = num_gpu_nodes + num_cpu_nodes;
-
-    //printf("total_threads: %d\n", total_threads);
-    //printf("num_gpu_threads: %d\n", num_gpu_threads);
-    //printf("num_cpu_threads: %d\n", num_cpu_threads);
-    printf("2) num_gpu_nodes: %d\n", num_gpu_nodes);
-    printf("2) num_cpu_nodes: %d\n", num_cpu_nodes);
-    //printf("bucket: %d\n", bucket);
-#endif
-
     // min_gid is first valid gid i should create, hence ask for the first local
     // gid after min_gid-1
     while ( gid < max_gid )
     {
-      const thread vp = kernel().vp_manager.suggest_vp( gid );
-      const thread t = kernel().vp_manager.vp_to_thread( vp );
+      thread vp;
+      int k = gid % bucket;
+      if (k < gpu_bucket)
+          vp = gid % num_gpu_threads;
+      else
+          vp = gid % num_cpu_threads + num_gpu_threads;
+      //printf("gid: %d vp: %d\n", gid, vp);
 
+      //const thread vp = kernel().vp_manager.suggest_vp( gid );
+      const thread _thread = kernel().vp_manager.vp_to_thread( vp );
       if ( kernel().vp_manager.is_local_vp( vp ) )
       {
-        int _thread = t;
-
-#ifdef LOAD_BALANCE
-        int k = gid % bucket;
-        if (k < num_gpu_nodes)
-            _thread = gid % num_gpu_threads;
-        else
-            _thread = gid % num_cpu_threads + num_gpu_threads;
-        
-        //printf("gid: %d t: %d k: %d _thread: %d\n", gid, t, k, _thread);
-#endif
-
         Node* newnode = model->allocate( _thread );
         newnode->set_gid_( gid );
         newnode->set_model_id( mod );
