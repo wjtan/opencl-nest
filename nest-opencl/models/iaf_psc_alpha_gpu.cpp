@@ -10,7 +10,7 @@
 // #define PROFILING_SIZE
 #include "profile.h"
 
-//#define STATIC
+#define STATIC
 
 //nest::iaf_psc_alpha_gpu::clContext_ nest::iaf_psc_alpha_gpu::gpu_context;
 //cl::Context nest::iaf_psc_alpha_gpu::context;
